@@ -33,10 +33,13 @@ impl Handlers {
         self.handlers.insert("FLUSHDB".into(), flushdb);
 
         self.handlers.insert("SET".into(), set);
-        self.handlers.insert("GET".into(), get);
-
         self.handlers.insert("HSET".into(), hset);
+
+        self.handlers.insert("GET".into(), get);
         self.handlers.insert("HGET".into(), hget);
+
+        self.handlers.insert("DEL".into(), del);
+        self.handlers.insert("HDEL".into(), hdel);
     }
 
     pub fn get(&self, key: String) -> &Handler {
@@ -188,4 +191,42 @@ fn hget(args: Vec<Value>) -> Value {
         Some(s) => Value::Bulk(s.into()),
         None => Value::Null,
     }
+}
+
+fn del(args: Vec<Value>) -> Value {
+    if args.len() == 0 {
+        return Value::Error("ERR: No arguments were provided".into());
+    }
+
+    let mut counter: i64 = 0;
+
+    for arg in args {
+        if let Value::Bulk(key) = arg {
+            match SET.write().unwrap().remove(&key) {
+                Some(_) => counter += 1,
+                _ => (),
+            };
+        }
+    }
+
+    Value::Num(counter)
+}
+
+fn hdel(args: Vec<Value>) -> Value {
+    if args.len() == 0 {
+        return Value::Error("ERR: No arguments were provided".into());
+    }
+
+    let mut counter: i64 = 0;
+
+    for arg in args {
+        if let Value::Bulk(key) = arg {
+            match HSET.write().unwrap().remove(&key) {
+                Some(_) => counter += 1,
+                _ => (),
+            };
+        }
+    }
+
+    Value::Num(counter)
 }
