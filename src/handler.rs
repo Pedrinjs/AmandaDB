@@ -38,8 +38,8 @@ impl Handlers {
         self.handlers.insert("GET".into(), get);
         self.handlers.insert("HGET".into(), hget);
 
-        self.handlers.insert("DEL".into(), del);
-        self.handlers.insert("HDEL".into(), hdel);
+        // self.handlers.insert("DEL".into(), del);
+        // self.handlers.insert("HDEL".into(), hdel);
     }
 
     pub fn get(&self, key: String) -> &Handler {
@@ -193,7 +193,7 @@ fn hget(args: Vec<Value>) -> Value {
     }
 }
 
-fn del(args: Vec<Value>) -> Value {
+/*fn del(args: Vec<Value>) -> Value {
     if args.len() == 0 {
         return Value::Error("ERR: No arguments were provided".into());
     }
@@ -217,10 +217,26 @@ fn hdel(args: Vec<Value>) -> Value {
         return Value::Error("ERR: No arguments were provided".into());
     }
 
+    if args.len() == 1 {
+        return Value::Error("ERR: Wrong number of arguments provided".into());
+    }
+
     let mut counter: i64 = 0;
 
-    for arg in args {
-        if let Value::Bulk(key) = arg {
+    let Value::Bulk(hash) = &args[0] else { return Value::Num(counter); };
+    let keys = args[1..].to_vec();
+
+    let map = match HSET.read().unwrap().get(hash) {
+        Some(m) => m.clone(),
+        None => return Value::Num(counter),
+    };
+
+    for key in keys {
+        if let Value::Bulk(key) = key {
+            if !map.contains_key(&key) {
+                continue;
+            }
+
             match HSET.write().unwrap().remove(&key) {
                 Some(_) => counter += 1,
                 _ => (),
@@ -228,5 +244,7 @@ fn hdel(args: Vec<Value>) -> Value {
         }
     }
 
+    counter += 1;
+
     Value::Num(counter)
-}
+}*/
