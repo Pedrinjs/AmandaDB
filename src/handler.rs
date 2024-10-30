@@ -1,26 +1,26 @@
-use std::collections::BTreeMap;
-use std::sync::{Arc, LazyLock, RwLock};
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::resp::Value;
 
-static SET: LazyLock<Arc<RwLock<BTreeMap<String, String>>>> = LazyLock::new(|| {
-    Arc::new(RwLock::new(BTreeMap::new()))
+static SET: LazyLock<Arc<Mutex<HashMap<String, String>>>> = LazyLock::new(|| {
+    Arc::new(Mutex::new(HashMap::new()))
 });
 
-static HSET: LazyLock<Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>> = LazyLock::new(|| {
-    Arc::new(RwLock::new(BTreeMap::new()))
+static HSET: LazyLock<Arc<Mutex<HashMap<String, HashMap<String, String>>>>> = LazyLock::new(|| {
+    Arc::new(Mutex::new(HashMap::new()))
 });
 
 type Handler = fn(Vec<Value>) -> Value;
 
 pub struct Handlers {
-    handlers: BTreeMap<String, Handler>
+    handlers: HashMap<String, Handler>
 }
 
 impl Handlers {
     pub fn new() -> Self {
         Handlers{
-            handlers: BTreeMap::new(),
+            handlers: HashMap::new(),
         }
     }
 
@@ -29,8 +29,10 @@ impl Handlers {
         self.handlers.insert("ECHO".into(), echo);
 
         self.handlers.insert("DBSIZE".into(), dbsize);
-        self.handlers.insert("EXISTS".into(), exists);
         self.handlers.insert("FLUSHDB".into(), flushdb);
+
+        self.handlers.insert("EXISTS".into(), exists);
+        self.handlers.insert("HEXISTS".into(), hexists);
 
         self.handlers.insert("SET".into(), set);
         self.handlers.insert("HSET".into(), hset);
@@ -66,19 +68,19 @@ fn ping(args: Vec<Value>) -> Value {
 
 fn echo(args: Vec<Value>) -> Value {
     if args.len() != 1 {
-        return Value::Error("ERR: Wrong number of arguments for command".into());
+        return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
     let Value::Bulk(name) = &args[0] else {
-        return Value::Error("ERR: Only bulk is acceptable".into());
+        return Value::Error("ERR: Argument must be a bulk string".into());
     };
 
     return Value::Bulk(name.into());
 }
 
 fn dbsize(_args: Vec<Value>) -> Value {
-    let set_len = SET.read().unwrap().len();
-    let hset_len = HSET.read().unwrap().len();
+    let set_len = SET.lock().unwrap().len();
+    let hset_len = HSET.lock().unwrap().len();
 
     let total_len: i64 = (set_len + hset_len) as i64;
     Value::Num(total_len)
@@ -86,20 +88,32 @@ fn dbsize(_args: Vec<Value>) -> Value {
 
 fn exists(args: Vec<Value>) -> Value {
     if args.len() == 0 {
-        return Value::Error("ERR: Only bulk is acceptable".into());
+        return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
     let mut counter: i64 = 0;
-    println!("{args:?}");
 
     for val in args {
-        println!("{val:?}");
         if let Value::Bulk(key) = val {
-            if SET.read().unwrap().contains_key(&key) {
+            if SET.lock().unwrap().contains_key(&key) {
                 counter += 1;
             }
-            
-            if HSET.read().unwrap().contains_key(&key) {
+        }
+    }
+
+    Value::Num(counter)
+}
+
+fn hexists(args: Vec<Value>) -> Value {
+    if args.len() == 0 {
+        return Value::Error("ERR: Wrong number of arguments provided".into());
+    }
+
+    let mut counter: i64 = 0;
+
+    for val in args {
+        if let Value::Bulk(key) = val {
+            if HSET.lock().unwrap().contains_key(&key) {
                 counter += 1;
             }
         }
@@ -113,8 +127,8 @@ fn flushdb(args: Vec<Value>) -> Value {
         return Value::Null;
     }
 
-    SET.write().unwrap().clear();
-    HSET.write().unwrap().clear();
+    SET.lock().unwrap().clear();
+    HSET.lock().unwrap().clear();
 
     std::fs::File::create("database.aof").unwrap();
 
@@ -122,23 +136,24 @@ fn flushdb(args: Vec<Value>) -> Value {
 }
 
 fn set(args: Vec<Value>) -> Value {
-    let wrong_err = Value::Error("ERR: Wrong number of arguments for command".into());
-    let args_err = Value::Error("ERR: Incorrect definition for key or value".into());
-        
     if args.len() != 2 {
-        return wrong_err;
+        return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
-    let Value::Bulk(key) = &args[0] else { return args_err; };
-    let Value::Bulk(value) = &args[1] else { return args_err; };
+    let Value::Bulk(key) = &args[0] else {
+        return Value::Error("ERR: Key must be a bulk string".into());
+    };
+    let Value::Bulk(value) = &args[1] else {
+        return Value::Error("ERR: Value must be a bulk string".into());
+    };
 
-    SET.write().unwrap().insert(key.into(), value.into());
+    SET.lock().unwrap().insert(key.into(), value.into());
 
     Value::Str("OK".into())
 }
 
 fn get(args: Vec<Value>) -> Value {
-    let wrong_err = Value::Error("ERR: Wrong number of arguments for 'get' command".into());
+    let wrong_err = Value::Error("ERR: Wrong number of arguments provided".into());
     let args_err = Value::Error("ERR: Key wasn't registered in database".into());
         
     if args.len() != 1 {
@@ -147,42 +162,41 @@ fn get(args: Vec<Value>) -> Value {
 
     let Value::Bulk(key) = &args[0] else { return args_err; };
 
-    match SET.read().unwrap().get(key) {
+    match SET.lock().unwrap().get(key) {
         Some(s) => Value::Bulk(s.into()),
         None => Value::Null,
     }
 }
 
 fn hset(args: Vec<Value>) -> Value {
-    let wrong_err = Value::Error("ERR: Wrong number of arguments for 'hset' command".into());
     let args_err = Value::Error("ERR: Incorrect definition for hash, key or value".into());
-
-    if args.len() != 3 {
-        return wrong_err;
+    if args.len() < 3 {
+        return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
     let Value::Bulk(hash) = &args[0] else { return args_err; };
-    let Value::Bulk(key) = &args[1] else { return args_err; };
+    let Value::Bulk(key) = &args[1] else {return args_err; };
     let Value::Bulk(value) = &args[2] else { return args_err; };
 
-    let map: BTreeMap<String, String> = BTreeMap::from([(key.into(), value.into())]);
-    HSET.write().unwrap().insert(hash.into(), map);
+    let map: HashMap<String, String> = HashMap::from([(key.into(), value.into())]);
+    HSET.lock().unwrap().insert(hash.into(), map);
 
     Value::Str("OK".into())
 }
 
 fn hget(args: Vec<Value>) -> Value {
-    let wrong_err = Value::Error("ERR: Wrong number of arguments for 'hget' command".into());
-    let args_err = Value::Error("ERR: Hash or key weren't registered in database".into());
-
     if args.len() != 2 {
-        return wrong_err;
+        return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
-    let Value::Bulk(hash) = &args[0] else { return args_err; };
-    let Value::Bulk(key) = &args[1] else { return args_err; };
+    let Value::Bulk(hash) = &args[0] else {
+        return Value::Error("ERR: Hash must be a bulk string".into());
+    };
+    let Value::Bulk(key) = &args[1] else {
+        return Value::Error("ERR: Key must be a bulk string".into());
+    };
 
-    let map = match HSET.read().unwrap().get(hash) {
+    let map = match HSET.lock().unwrap().get(hash) {
         Some(m) => m.clone(),
         None => { return Value::Null; },
     };
