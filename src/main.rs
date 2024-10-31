@@ -2,17 +2,18 @@ use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use std::str::from_utf8;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 mod aof;
+mod error;
 mod handler;
 mod resp;
-mod error;
+mod thread;
 
 use aof::AOF;
 use error::{new_error, Result};
 use handler::Handlers;
 use resp::{Resp, Value, Writer};
+use thread::ThreadPool;
 
 fn handle_read(value: Value) {
     let Value::Array(arr) = value else {
@@ -35,15 +36,16 @@ fn handle_read(value: Value) {
 
 fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
-    let aof = Arc::new(Mutex::new(AOF::new("database.aof".into())?));
+    let tpool = ThreadPool::new(4);
 
+    let aof = Arc::new(Mutex::new(AOF::new("database.aof".into())?));
     aof.lock().unwrap().read(handle_read)?;
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         let aof = Arc::clone(&aof);
 
-        thread::spawn(move || {
+        tpool.execute(|| {
             match handle_request(stream, aof) {
                 Ok(_) => (),
                 Err(e) => println!("{e}"),
