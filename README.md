@@ -1,8 +1,8 @@
 # AmandaDB
 AmandaDB is a simple Redis clone built with Rust standart library, compatible with Redis CLI.
 
-Getting Started
--
+## Getting Started
+
 Cloning the git repository:
 ```
 git clone https://github.com/Pedrinjs/AmandaDB
@@ -22,6 +22,10 @@ printf "[your command]" | netcat localhost 6379
 redis-cli
 ```
 
-Docs
--
+## Features
+- Basic redis commands
+- `redis-cli` support
+- Multithreading
+
+## Docs
 Although this current project isn't fully compatible, you can read the official docs for Redis in <https://redis.io/docs/latest/>
