@@ -81,8 +81,9 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>) -> Result<()> {
     let mut handlers = Handlers::new();
     handlers.init();
     let handler = handlers.get(command.to_uppercase());
-        
-    if &command.to_uppercase() == "SET" || &command.to_uppercase() == "HSET" {
+    
+    let command_list = vec!["SET", "HSET", "DEL", "HDEL"];
+    if command_list.contains(&command.to_uppercase().as_str()) {
         aof.lock().unwrap().write(value)?;
     }
 

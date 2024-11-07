@@ -1,8 +1,8 @@
 # AmandaDB
 
 ### Todo
-- [ ] Fix DEL and HDEL
-- [ ] Organize arguments for HSET in field-value pairs
+- [ ] Organize arguments for HSET in key-value pairs
+- [ ] Organize arguments for HDEL in hash-key pairs
 - [ ] Pub/Sub
 - [ ] Transactions
 - [ ] Find some way to boost performance
