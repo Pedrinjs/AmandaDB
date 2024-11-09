@@ -42,6 +42,9 @@ impl Handlers {
 
         self.handlers.insert("DEL".into(), del);
         self.handlers.insert("HDEL".into(), hdel);
+
+        self.handlers.insert("INCR".into(), incr);
+        self.handlers.insert("DECR".into(), decr);
     }
 
     pub fn get(&self, key: String) -> &Handler {
@@ -253,4 +256,71 @@ fn hdel(args: Vec<Value>) -> Value {
     HSET.lock().unwrap().insert(hash.into(), hmap.into());
 
     Value::Num(counter)
+}
+
+fn incr(args: Vec<Value>) -> Value {
+    if args.len() != 1 {
+        return Value::Error("ERR: Incorrect number of arguments".into());
+    }
+
+    let Value::Bulk(key) = &args[0] else {
+        return Value::Error("ERR: Key must be a bulk string".into());
+    };
+
+    let mut value = 0;
+    let mut err = String::new();
+    
+    SET.lock().unwrap().entry(key.into())
+        .and_modify(|val| {
+            let v = match val.parse::<i64>() {
+                Ok(n) => n,
+                _ => {
+                    err = "ERR: Value is not an integer or out of range".into();
+                    return ();
+                },
+            };
+            value = v + 1;
+            *val = value.to_string()
+        })
+        .or_insert_with(|| {
+            value += 1;
+            value.to_string()
+        });
+
+    if err.len() != 0 {
+        return Value::Error(err);
+    }
+    Value::Num(value)
+}
+
+fn decr(args: Vec<Value>) -> Value {
+    if args.len() != 1 {
+        return Value::Error("ERR: Wrong number of arguments".into());
+    }
+    
+    let Value::Bulk(key) = &args[0] else {
+        return Value::Error("ERR: Wrong definition for key".into());
+    };
+
+    let mut value = 0;
+    let mut err = String::new();
+    
+    SET.lock().unwrap().entry(key.into())
+        .and_modify(|val| {
+            let v = match val.parse::<i64>() {
+                Ok(n) => n,
+                _ => { err = "ERR: Value is not an integer or out of range".into(); return (); },
+            };
+            value = v - 1;
+            *val = value.to_string()
+        })
+        .or_insert_with(|| {
+            value -= 1;
+            value.to_string()
+        });
+
+    if err.len() != 0 {
+        return Value::Error(err);
+    }
+    Value::Num(value)
 }
