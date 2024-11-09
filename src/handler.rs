@@ -44,7 +44,10 @@ impl Handlers {
         self.handlers.insert("HDEL".into(), hdel);
 
         self.handlers.insert("INCR".into(), incr);
+        self.handlers.insert("INCRBY".into(), incr_by);
+
         self.handlers.insert("DECR".into(), decr);
+        self.handlers.insert("DECRBY".into(), decr_by);
     }
 
     pub fn get(&self, key: String) -> &Handler {
@@ -91,7 +94,7 @@ fn exists(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
-    let mut counter: i64 = 0;
+    let mut counter = 0i64;
     for val in args {
         if let Value::Bulk(key) = val {
             if SET.lock().unwrap().contains_key(&key) {
@@ -107,7 +110,7 @@ fn hexists(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
-    let mut counter: i64 = 0;
+    let mut counter = 0i64;
     for val in args {
         if let Value::Bulk(key) = val {
             if HSET.lock().unwrap().contains_key(&key) {
@@ -212,7 +215,7 @@ fn del(args: Vec<Value>) -> Value {
         return Value::Error("ERR: No arguments were provided".into());
     }
 
-    let mut counter: i64 = 0;
+    let mut counter = 0i64;
     for arg in args {
         if let Value::Bulk(key) = arg {
             match SET.lock().unwrap().remove(&key) {
@@ -234,7 +237,7 @@ fn hdel(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
 
-    let mut counter: i64 = 0;
+    let mut counter = 0i64;
 
     let Value::Bulk(hash) = &args[0] else {
         return Value::Error("ERR: Wrong definition for hash".into());
@@ -264,10 +267,10 @@ fn incr(args: Vec<Value>) -> Value {
     }
 
     let Value::Bulk(key) = &args[0] else {
-        return Value::Error("ERR: Key must be a bulk string".into());
+        return Value::Error("ERR: Incorrect definition for key".into());
     };
 
-    let mut value = 0;
+    let mut value = 0i64;
     let mut err = String::new();
     
     SET.lock().unwrap().entry(key.into())
@@ -293,6 +296,49 @@ fn incr(args: Vec<Value>) -> Value {
     Value::Num(value)
 }
 
+fn incr_by(args: Vec<Value>) -> Value {
+    if args.len() != 2 {
+        return Value::Error("ERR: Wrong number of arguments".into());
+    }
+
+    let Value::Bulk(key) = &args[0] else {
+        return Value::Error("ERR: Wrong definition for key".into());
+    };
+
+    let Value::Bulk(increment) = &args[1] else {
+        return Value::Error("ERR: Value is not an integer or out of range".into());
+    };
+
+    let incr = match increment.parse::<i64>() {
+        Ok(n) => n,
+        _ => return Value::Error("ERR: Value is not an integer or out of range".into()),
+    };
+
+    let mut value = 0i64;
+    let mut err = String::new();
+
+    SET.lock().unwrap().entry(key.into())
+        .and_modify(|val| {
+            let v = match val.parse::<i64>() {
+                Ok(n) => n,
+                _ => {
+                    err = "ERR: Value is not an integer or out of range".to_string();
+                    return ();
+                },
+            };
+            value = v + incr;
+            *val = value.to_string();
+        }).or_insert_with(|| {
+            value += incr;
+            value.to_string()
+        });
+
+    if err.len() != 0 {
+        return Value::Error(err);
+    }
+    Value::Num(value)
+}
+
 fn decr(args: Vec<Value>) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments".into());
@@ -302,20 +348,68 @@ fn decr(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Wrong definition for key".into());
     };
 
-    let mut value = 0;
+    let mut value = 0i64;
     let mut err = String::new();
     
     SET.lock().unwrap().entry(key.into())
         .and_modify(|val| {
             let v = match val.parse::<i64>() {
                 Ok(n) => n,
-                _ => { err = "ERR: Value is not an integer or out of range".into(); return (); },
+                _ => {
+                    err = "ERR: Value is not an integer or out of range".into();
+                    return ();
+                },
             };
+
             value = v - 1;
             *val = value.to_string()
         })
         .or_insert_with(|| {
             value -= 1;
+            value.to_string()
+        });
+
+    if err.len() != 0 {
+        return Value::Error(err);
+    }
+    Value::Num(value)
+}
+
+fn decr_by(args: Vec<Value>) -> Value {
+    if args.len() != 2 {
+        return Value::Error("ERR: Wrong number of arguments".into());
+    }
+
+    let Value::Bulk(key) = &args[0] else {
+        return Value::Error("ERR: Incorrect definition for key".into());
+    };
+
+    let Value::Bulk(decrement) = &args[1] else {
+        return Value::Error("ERR: Value is not an integer or out of range".into());
+    };
+
+    let decr = match decrement.parse::<i64>() {
+        Ok(n) => n,
+        _ => return Value::Error("ERR: Value is not an integer or out of range".into()),
+    };
+
+    let mut value = 0i64;
+    let mut err = String::new();
+
+    SET.lock().unwrap().entry(key.into())
+        .and_modify(|val| {
+            let v = match val.parse::<i64>() {
+                Ok(n) => n,
+                _ => {
+                    err = "ERR: Value is not an integer or out of range".into();
+                    return ();
+                },
+            };
+            value = v - decr;
+            *val = value.to_string()
+        })
+        .or_insert_with(|| {
+            value -= decr;
             value.to_string()
         });
 
