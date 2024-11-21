@@ -3,7 +3,10 @@ use std::io::prelude::*;
 use std::sync::{Arc, Mutex};
 
 use crate::error::Result;
+use crate::handlers::types::Database;
 use crate::resp::{Resp, Value};
+
+type DB = Arc<Mutex<Database>>;
 
 pub struct AOF {
     file: Arc<Mutex<File>>,
@@ -22,7 +25,7 @@ impl AOF {
         })
     }
 
-    pub fn read(&mut self, func: fn(Value)) -> Result<()> {
+    pub fn read(&mut self, func: fn(Value, DB), db: DB) -> Result<()> {
         let mut file = self.file.lock().unwrap();
         let len = file.metadata().unwrap().len();
         if len == 0 {
@@ -43,7 +46,7 @@ impl AOF {
                 _ => (),
             };
 
-            func(value);
+            func(value, Arc::clone(&db));
         }
 
         Ok(())

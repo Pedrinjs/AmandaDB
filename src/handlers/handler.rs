@@ -1,23 +1,16 @@
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 
+use super::types::{Database, Handler};
 use crate::resp::Value;
 
-static SET: LazyLock<Arc<Mutex<HashMap<String, String>>>> = LazyLock::new(|| {
-    Arc::new(Mutex::new(HashMap::new()))
-});
+type DB = Arc<Mutex<Database>>;
 
-static HSET: LazyLock<Arc<Mutex<HashMap<String, HashMap<String, String>>>>> = LazyLock::new(|| {
-    Arc::new(Mutex::new(HashMap::new()))
-});
-
-type Handler = fn(Vec<Value>) -> Value;
-
-pub struct Handlers {
-    handlers: HashMap<String, Handler>
+pub struct Handlers<'a> {
+    handlers: HashMap<&'a str, Handler>,
 }
 
-impl Handlers {
+impl<'a> Handlers<'a> {
     pub fn new() -> Self {
         Handlers{
             handlers: HashMap::new(),
@@ -25,37 +18,41 @@ impl Handlers {
     }
 
     pub fn init(&mut self) {
-        self.handlers.insert("PING".into(), ping);
-        self.handlers.insert("ECHO".into(), echo);
+        self.handlers.insert("PING", ping);
+        self.handlers.insert("ECHO", echo);
 
-        self.handlers.insert("DBSIZE".into(), dbsize);
-        self.handlers.insert("FLUSHDB".into(), flushdb);
+        self.handlers.insert("DBSIZE", dbsize);
+        self.handlers.insert("FLUSHDB", flushdb);
 
-        self.handlers.insert("EXISTS".into(), exists);
-        self.handlers.insert("HEXISTS".into(), hexists);
+        self.handlers.insert("EXISTS", exists);
+        self.handlers.insert("HEXISTS", hexists);
 
-        self.handlers.insert("SET".into(), set);
-        self.handlers.insert("HSET".into(), hset);
+        self.handlers.insert("SET", set);
+        self.handlers.insert("HSET", hset);
 
-        self.handlers.insert("GET".into(), get);
-        self.handlers.insert("HGET".into(), hget);
+        self.handlers.insert("GET", get);
+        self.handlers.insert("HGET", hget);
 
-        self.handlers.insert("DEL".into(), del);
-        self.handlers.insert("HDEL".into(), hdel);
+        self.handlers.insert("DEL", del);
+        self.handlers.insert("HDEL", hdel);
 
-        self.handlers.insert("INCR".into(), incr);
-        self.handlers.insert("INCRBY".into(), incr_by);
+        self.handlers.insert("INCR", incr);
+        self.handlers.insert("INCRBY", incr_by);
 
-        self.handlers.insert("DECR".into(), decr);
-        self.handlers.insert("DECRBY".into(), decr_by);
+        self.handlers.insert("DECR", decr);
+        self.handlers.insert("DECRBY", decr_by);
+
+        self.handlers.insert("MULTI", multi);
+        self.handlers.insert("EXEC", exec);
+        self.handlers.insert("DISCARD", discard);
     }
 
-    pub fn get(&self, key: String) -> &Handler {
-        self.handlers.get(&key).unwrap()
+    pub fn get(&self, key: &str) -> &Handler {
+        self.handlers.get(key).unwrap()
     }
 }
 
-fn ping(args: Vec<Value>) -> Value {
+fn ping(args: Vec<Value>, _db: DB) -> Value {
     if args.len() > 1 {
         return Value::Error("ERR: Wrong number of arguments for command".into());
     }
@@ -70,7 +67,7 @@ fn ping(args: Vec<Value>) -> Value {
     return Value::Bulk(name.into());
 }
 
-fn echo(args: Vec<Value>) -> Value {
+fn echo(args: Vec<Value>, _db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -82,14 +79,14 @@ fn echo(args: Vec<Value>) -> Value {
     return Value::Bulk(name.into());
 }
 
-fn dbsize(_args: Vec<Value>) -> Value {
-    let set_len = SET.lock().unwrap().len();
-    let hset_len = HSET.lock().unwrap().len();
+fn dbsize(_args: Vec<Value>, db: DB) -> Value {
+    let set_len = db.lock().unwrap().set.len();
+    let hset_len = db.lock().unwrap().hset.len();
     let total_len: i64 = (set_len + hset_len) as i64;
     Value::Num(total_len)
 }
 
-fn exists(args: Vec<Value>) -> Value {
+fn exists(args: Vec<Value>, db: DB) -> Value {
     if args.len() == 0 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -97,7 +94,7 @@ fn exists(args: Vec<Value>) -> Value {
     let mut counter = 0i64;
     for val in args {
         if let Value::Bulk(key) = val {
-            if SET.lock().unwrap().contains_key(&key) {
+            if db.lock().unwrap().set.contains_key(&key) {
                 counter += 1;
             }
         }
@@ -105,7 +102,7 @@ fn exists(args: Vec<Value>) -> Value {
     Value::Num(counter)
 }
 
-fn hexists(args: Vec<Value>) -> Value {
+fn hexists(args: Vec<Value>, db: DB) -> Value {
     if args.len() == 0 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -113,7 +110,7 @@ fn hexists(args: Vec<Value>) -> Value {
     let mut counter = 0i64;
     for val in args {
         if let Value::Bulk(key) = val {
-            if HSET.lock().unwrap().contains_key(&key) {
+            if db.lock().unwrap().hset.contains_key(&key) {
                 counter += 1;
             }
         }
@@ -121,20 +118,21 @@ fn hexists(args: Vec<Value>) -> Value {
     Value::Num(counter)
 }
 
-fn flushdb(args: Vec<Value>) -> Value {
+fn flushdb(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 0 {
         return Value::Null;
     }
 
-    SET.lock().unwrap().clear();
-    HSET.lock().unwrap().clear();
+    db.lock().unwrap().set.clear();
+    db.lock().unwrap().hset.clear();
 
     std::fs::File::create("database.aof").unwrap();
 
     Value::Null
 }
 
-fn set(args: Vec<Value>) -> Value {
+fn set(args: Vec<Value>, db: DB) -> Value {
+    println!("{args:?}");
     if args.len() != 2 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -142,16 +140,20 @@ fn set(args: Vec<Value>) -> Value {
     let Value::Bulk(key) = &args[0] else {
         return Value::Error("ERR: Key must be a bulk string".into());
     };
+    println!("{key}");
+
     let Value::Bulk(value) = &args[1] else {
         return Value::Error("ERR: Value must be a bulk string".into());
     };
+    println!("{value}");
 
-    SET.lock().unwrap().insert(key.into(), value.into());
+    db.lock().unwrap().set.insert(key.into(), value.into());
+    println!("{:?}", db.lock().unwrap().set);
 
     Value::Str("OK".into())
 }
 
-fn get(args: Vec<Value>) -> Value {
+fn get(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -160,13 +162,13 @@ fn get(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Key wasn't registered in database".into());
     };
 
-    match SET.lock().unwrap().get(key) {
+    match db.lock().unwrap().set.get(key) {
         Some(s) => Value::Bulk(s.into()),
         _ => Value::Null,
     }
 }
 
-fn hset(args: Vec<Value>) -> Value {
+fn hset(args: Vec<Value>, db: DB) -> Value {
     if args.len() < 3 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -182,12 +184,12 @@ fn hset(args: Vec<Value>) -> Value {
     };
 
     let map: HashMap<String, String> = HashMap::from([(key.into(), value.into())]);
-    HSET.lock().unwrap().insert(hash.into(), map);
+    db.lock().unwrap().hset.insert(hash.into(), map);
 
     Value::Str("OK".into())
 }
 
-fn hget(args: Vec<Value>) -> Value {
+fn hget(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 2 {
         return Value::Error("ERR: Wrong number of arguments provided".into());
     }
@@ -199,7 +201,7 @@ fn hget(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Key must be a bulk string".into());
     };
 
-    let map = match HSET.lock().unwrap().get(hash) {
+    let map = match db.lock().unwrap().hset.get(hash) {
         Some(m) => m.clone(),
         _ => { return Value::Null; },
     };
@@ -210,7 +212,7 @@ fn hget(args: Vec<Value>) -> Value {
     }
 }
 
-fn del(args: Vec<Value>) -> Value {
+fn del(args: Vec<Value>, db: DB) -> Value {
     if args.len() == 0 {
         return Value::Error("ERR: No arguments were provided".into());
     }
@@ -218,7 +220,7 @@ fn del(args: Vec<Value>) -> Value {
     let mut counter = 0i64;
     for arg in args {
         if let Value::Bulk(key) = arg {
-            match SET.lock().unwrap().remove(&key) {
+            match db.lock().unwrap().set.remove(&key) {
                 Some(_) => counter += 1,
                 _ => (),
             };
@@ -229,7 +231,7 @@ fn del(args: Vec<Value>) -> Value {
     Value::Num(counter)
 }
 
-fn hdel(args: Vec<Value>) -> Value {
+fn hdel(args: Vec<Value>, db: DB) -> Value {
     if args.len() == 0 {
         return Value::Error("ERR: No arguments were provided".into());
     }
@@ -246,7 +248,7 @@ fn hdel(args: Vec<Value>) -> Value {
         return Value::Error("ERR: Wrong definition for key".into());
     };
 
-    let mut hmap = match HSET.lock().unwrap().get(hash) {
+    let mut hmap = match db.lock().unwrap().hset.get(hash) {
         Some(m) => m.clone(),
         _ => { return Value::Num(counter); },
     };
@@ -256,12 +258,12 @@ fn hdel(args: Vec<Value>) -> Value {
         _ => (),
     };
 
-    HSET.lock().unwrap().insert(hash.into(), hmap.into());
+    db.lock().unwrap().hset.insert(hash.into(), hmap.into());
 
     Value::Num(counter)
 }
 
-fn incr(args: Vec<Value>) -> Value {
+fn incr(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Incorrect number of arguments".into());
     }
@@ -273,7 +275,7 @@ fn incr(args: Vec<Value>) -> Value {
     let mut value = 0i64;
     let mut err = String::new();
     
-    SET.lock().unwrap().entry(key.into())
+    db.lock().unwrap().set.entry(key.into())
         .and_modify(|val| {
             let v = match val.parse::<i64>() {
                 Ok(n) => n,
@@ -296,7 +298,7 @@ fn incr(args: Vec<Value>) -> Value {
     Value::Num(value)
 }
 
-fn incr_by(args: Vec<Value>) -> Value {
+fn incr_by(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 2 {
         return Value::Error("ERR: Wrong number of arguments".into());
     }
@@ -317,7 +319,7 @@ fn incr_by(args: Vec<Value>) -> Value {
     let mut value = 0i64;
     let mut err = String::new();
 
-    SET.lock().unwrap().entry(key.into())
+    db.lock().unwrap().set.entry(key.into())
         .and_modify(|val| {
             let v = match val.parse::<i64>() {
                 Ok(n) => n,
@@ -339,7 +341,7 @@ fn incr_by(args: Vec<Value>) -> Value {
     Value::Num(value)
 }
 
-fn decr(args: Vec<Value>) -> Value {
+fn decr(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments".into());
     }
@@ -351,7 +353,7 @@ fn decr(args: Vec<Value>) -> Value {
     let mut value = 0i64;
     let mut err = String::new();
     
-    SET.lock().unwrap().entry(key.into())
+    db.lock().unwrap().set.entry(key.into())
         .and_modify(|val| {
             let v = match val.parse::<i64>() {
                 Ok(n) => n,
@@ -375,7 +377,7 @@ fn decr(args: Vec<Value>) -> Value {
     Value::Num(value)
 }
 
-fn decr_by(args: Vec<Value>) -> Value {
+fn decr_by(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 2 {
         return Value::Error("ERR: Wrong number of arguments".into());
     }
@@ -396,7 +398,7 @@ fn decr_by(args: Vec<Value>) -> Value {
     let mut value = 0i64;
     let mut err = String::new();
 
-    SET.lock().unwrap().entry(key.into())
+    db.lock().unwrap().set.entry(key.into())
         .and_modify(|val| {
             let v = match val.parse::<i64>() {
                 Ok(n) => n,
@@ -417,4 +419,39 @@ fn decr_by(args: Vec<Value>) -> Value {
         return Value::Error(err);
     }
     Value::Num(value)
+}
+
+fn multi(args: Vec<Value>, db: DB) -> Value {
+    if args.len() != 0 {
+        return Value::Error("ERR: Wrong number of arguments".into());
+    }
+
+    db.lock().unwrap().set_transaction_mode(true);
+    Value::Str("OK".into())
+}
+
+fn exec(args: Vec<Value>, db: DB) -> Value {
+    if args.len() != 0 {
+        return Value::Error("ERR: Wrong number of arguments".into());
+    }
+
+    let transaction = db.lock().unwrap().multi.clone();
+    let values: Vec<Value> = transaction
+        .iter()
+        .map(|(args, handler)| {
+            handler(args.clone(), Arc::clone(&db))
+        })
+        .collect();
+    db.lock().unwrap().multi.clear();
+
+    Value::Array(values)
+}
+
+fn discard(args: Vec<Value>, db: DB) -> Value {
+    if args.len() != 0 {
+        return Value::Error("ERR: Wrong number of arguments".into());
+    }
+
+    db.lock().unwrap().multi.clear();
+    Value::Str("OK".into())
 }
