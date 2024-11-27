@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::resp::Value;
 
-pub type Handler = fn(Vec<Value>, db: Arc<Mutex<Database>>) -> Value;
+pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
 
 pub struct Database {
     pub set: HashMap<String, String>,

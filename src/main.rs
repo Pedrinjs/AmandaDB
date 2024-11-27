@@ -21,7 +21,7 @@ fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
         return;
     };
 
-    let Value::Bulk(ref command) = arr[0] else {
+    let Value::Bulk(command) = &arr[0] else {
         println!("how?");
         return;
     };
@@ -30,7 +30,8 @@ fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
     let mut handlers = Handlers::new();
     handlers.init();
 
-    let handler = handlers.get(command.to_uppercase().as_str());
+    let cmd = command.to_uppercase();
+    let handler = handlers.get(cmd.as_str()).unwrap();
     handler(args.to_vec(), db);
 }
 
@@ -67,7 +68,7 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Dat
     let mut resp = Resp::new(request);
     let value = resp.read()?;
 
-    let Value::Array(arr) = value.clone() else {
+    /*let Value::Array(arr) = value.clone() else {
         return Err(new_error("Only arrays should be used."));
     };
     if arr.len() == 0 {
@@ -80,15 +81,15 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Dat
 
     let temp = command.to_uppercase();
     let cmd = temp.as_str();
-    let args = &arr[1..];
+    let args = &arr[1..];*/
 
     let mut handlers = Handlers::new();
     handlers.init();
-    let handler = handlers.get(cmd);
+    // let handler = handlers.get(cmd).unwrap();
     
-    let mut writer = Writer::new(stream);
+    let mut writer = Writer::new(Box::new(stream));
 
-    if cmd == "EXEC" || cmd == "DISCARD" {
+    /*if cmd == "EXEC" || cmd == "DISCARD" {
         db.lock().unwrap().set_transaction_mode(false);
     }
 
@@ -100,8 +101,12 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Dat
     let command_list = vec!["SET", "HSET", "DEL", "HDEL", "INCR", "INCRBY", "DECR", "DECRBY"];
     if command_list.contains(&cmd) {
         aof.lock().unwrap().write(value)?;
-    }
+    }*/
 
-    let result = handler(args.to_vec(), db);
+    // let result = handler(args.to_vec(), db);
+    let result = handlers.match_handler(value, aof, db);
+    if let Value::Error(err) = result {
+        return Err(new_error(err));
+    }
     writer.write(result)
 }

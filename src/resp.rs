@@ -1,6 +1,5 @@
 use std::char::from_digit;
 use std::io::{BufReader, Bytes, prelude::*};
-use std::net::TcpStream;
 
 use crate::error::Result;
 
@@ -12,11 +11,11 @@ const ARRAY: u8 = '*' as u8;
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Str(String),
+    Str(&'static str),
     Num(i64),
     Bulk(String),
     Array(Vec<Value>),
-    Error(String),
+    Error(&'static str),
     Null,
 }
 
@@ -37,7 +36,8 @@ impl Value {
 
         bytes.push(STRING);
         if let Value::Str(s) = self {
-            bytes.append(&mut s.into_bytes());
+            let temp = s.as_bytes();
+            bytes.append(&mut temp.to_vec());
         }
         bytes.extend(['\r' as u8, '\n' as u8]);
 
@@ -92,7 +92,8 @@ impl Value {
 
         bytes.push(ERROR);
         if let Value::Error(err) = self {
-            bytes.append(&mut err.into_bytes());
+            let temp = err.as_bytes();
+            bytes.append(&mut temp.to_vec());
         }
         bytes.extend(['\r' as u8, '\n' as u8]);
 
@@ -157,7 +158,8 @@ impl<'a> Resp<'a> {
         let mut value: Vec<Value> = Vec::new();
 
         for _ in 1..=len {
-            value.push(self.read()?);
+            let temp = self.read()?;
+            value.push(temp);
         }
 
         Ok(Value::Array(value))
@@ -171,11 +173,11 @@ impl<'a> Resp<'a> {
 }
 
 pub struct Writer {
-    writer: TcpStream,
+    writer: Box<dyn Write>,
 }
 
 impl Writer {
-    pub fn new(writer: TcpStream) -> Self {
+    pub fn new(writer: Box<dyn Write>) -> Self {
         Writer { writer }
     }
 
