@@ -68,42 +68,10 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Dat
     let mut resp = Resp::new(request);
     let value = resp.read()?;
 
-    /*let Value::Array(arr) = value.clone() else {
-        return Err(new_error("Only arrays should be used."));
-    };
-    if arr.len() == 0 {
-        return Err(new_error("An empty array was provided."));
-    }
-
-    let Value::Bulk(ref command) = arr[0] else {
-        return Err(new_error("Can't get access to the command."));
-    };
-
-    let temp = command.to_uppercase();
-    let cmd = temp.as_str();
-    let args = &arr[1..];*/
-
     let mut handlers = Handlers::new();
     handlers.init();
-    // let handler = handlers.get(cmd).unwrap();
-    
     let mut writer = Writer::new(Box::new(stream));
 
-    /*if cmd == "EXEC" || cmd == "DISCARD" {
-        db.lock().unwrap().set_transaction_mode(false);
-    }
-
-    if db.lock().unwrap().is_transaction_mode() {
-        db.lock().unwrap().multi.push((args.to_vec(), *handler));
-        return writer.write(Value::Str("QUEUED".into()))
-    }
-
-    let command_list = vec!["SET", "HSET", "DEL", "HDEL", "INCR", "INCRBY", "DECR", "DECRBY"];
-    if command_list.contains(&cmd) {
-        aof.lock().unwrap().write(value)?;
-    }*/
-
-    // let result = handler(args.to_vec(), db);
     let result = handlers.match_handler(value, aof, db);
     if let Value::Error(err) = result {
         return Err(new_error(err));
