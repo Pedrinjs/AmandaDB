@@ -6,9 +6,9 @@ use crate::resp::Value;
 pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
 
 pub struct Database {
-    pub set: HashMap<String, String>,
-    pub hset: HashMap<String, HashMap<String, String>>,
-    pub multi: Vec<(Vec<Value>, Handler)>,
+    set: HashMap<String, String>,
+    hset: HashMap<String, HashMap<String, String>>,
+    multi: Vec<(Vec<Value>, Handler)>,
     transaction_mode: bool,
 }
 
@@ -25,8 +25,110 @@ impl Database {
     pub fn is_transaction_mode(&self) -> bool {
         self.transaction_mode
     }
-
     pub fn set_transaction_mode(&mut self, state: bool) {
         self.transaction_mode = state
+    }
+
+    pub fn set_push(&mut self, key: String, value: String) {
+        self.set.insert(key, value);
+    }
+    pub fn set_get(&self, key: &String) -> Value {
+        match self.set.get(key) {
+            Some(value) => Value::Bulk(value.into()),
+            None => Value::Null,
+        }
+    }
+    pub fn set_remove(&mut self, key: &String) -> bool {
+        match self.set.remove(key) {
+            Some(_) => true,
+            None => false,
+        }
+    }
+    pub fn set_clear(&mut self) {
+        self.set.clear()
+    }
+    pub fn set_len(&self) -> usize {
+        self.set.len()
+    }
+    pub fn set_incr(&mut self, key: String, num: i64) -> Value {
+        let mut value = 0i64;
+        let mut err = "";
+
+        self.set.entry(key)
+            .and_modify(|val| {
+                let v = match val.parse::<i64>() {
+                    Ok(n) => n,
+                    _ => {
+                        err = "ERR: Value is not an integer or out of range";
+                        return;
+                    },
+                };
+                value = v + num;
+                *val = value.to_string()
+            })
+            .or_insert_with(|| {
+                value += num;
+                value.to_string()
+            });
+
+        if err.len() != 0 {
+            return Value::Error(err);
+        }
+        Value::Num(value)
+    }
+    pub fn set_contains(&self, key: &String) -> bool {
+        self.set.contains_key(key)
+    }
+
+    pub fn hset_push(&mut self, hash: String, key: String, value: String) {
+        let map: HashMap<String, String> = HashMap::from([(key, value)]);
+        self.hset.insert(hash, map);
+    }
+    pub fn hset_get(&mut self, hash: &String, key: &String) -> Value {
+        let map = match self.hset.get(hash) {
+            Some(m) => m.clone(),
+            _ => return Value::Null,
+        };
+
+        match map.get(key) {
+            Some(value) => Value::Bulk(value.into()),
+            None => Value::Null,
+        }
+    }
+    pub fn hset_remove(&mut self, hash: &String, key: &String) -> bool {
+        let mut hmap = match self.hset.get(hash) {
+            Some(m) => m.clone(),
+            None => return false,
+        };
+        match hmap.remove(key) {
+            Some(_) => (),
+            None => return false,
+        };
+
+        self.hset.insert(hash.into(), hmap);
+        true
+    }
+    pub fn hset_len(&self) -> usize {
+        self.hset.len()
+    }
+    pub fn hset_clear(&mut self) {
+        self.hset.clear()
+    }
+    pub fn hset_contains(&self, hash: &String, key: &String) -> bool {
+        let map = match self.hset.get(hash) {
+            Some(m) => m.clone(),
+            _ => return false,
+        };
+        map.contains_key(key)
+    }
+
+    pub fn multi_push(&mut self, args: Vec<Value>, handler: Handler) {
+        self.multi.push((args, handler))
+    }
+    pub fn multi_get(&self) -> Vec<(Vec<Value>, Handler)> {
+        self.multi.clone()
+    }
+    pub fn multi_clear(&mut self) {
+        self.multi.clear()
     }
 }

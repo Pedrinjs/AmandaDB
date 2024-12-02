@@ -41,7 +41,7 @@ impl<'a> Handlers<'a> {
 
             let args = &arr[1..];
             if db.lock().unwrap().is_transaction_mode() {
-                db.lock().unwrap().multi.push((args.to_vec(), *handler));
+                db.lock().unwrap().multi_push(args.to_vec(), *handler);
                 return Value::Str("QUEUED");
             }
 
@@ -70,6 +70,7 @@ impl<'a> Handlers<'a> {
         self.insert("PING", ping);
         self.insert("ECHO", echo);
         self.insert("DBSIZE", dbsize);
+        self.insert("HLEN", hlen);
         self.insert("FLUSHDB", flushdb);
         self.insert("EXISTS", exists);
         self.insert("HEXISTS", hexists);
@@ -114,11 +115,24 @@ fn echo(args: Vec<Value>, _db: DB) -> Value {
     return Value::Error("ERR: Argument must be a bulk string");
 }
 
-fn dbsize(_args: Vec<Value>, db: DB) -> Value {
-    let set_len = db.lock().unwrap().set.len();
-    let hset_len = db.lock().unwrap().hset.len();
+fn dbsize(args: Vec<Value>, db: DB) -> Value {
+    if args.len() != 0 {
+        return Value::Error("ERR: Wrong number of arguments provided");
+    }
+
+    let set_len = db.lock().unwrap().set_len();
+    let hset_len = db.lock().unwrap().hset_len();
     let total_len: i64 = (set_len + hset_len) as i64;
     Value::Num(total_len)
+}
+
+fn hlen(args: Vec<Value>, db: DB) -> Value {
+    if args.len() != 0 {
+        return Value::Error("Wrong number of arguments provided");
+    }
+
+    let len = db.lock().unwrap().hset_len();
+    Value::Num(len as i64)
 }
 
 fn exists(args: Vec<Value>, db: DB) -> Value {
@@ -129,7 +143,7 @@ fn exists(args: Vec<Value>, db: DB) -> Value {
     let mut counter = 0i64;
     for val in args {
         if let Value::Bulk(key) = val {
-            if db.lock().unwrap().set.contains_key(&key) {
+            if db.lock().unwrap().set_contains(&key) {
                 counter += 1;
             }
         }
@@ -143,18 +157,16 @@ fn hexists(args: Vec<Value>, db: DB) -> Value {
     }
 
     let mut counter = 0i64;
-    let Value::Bulk(key) = &args[0] else { return Value::Error(""); };
-    let Value::Bulk(field) = &args[1] else { return Value::Error(""); };
-
-    let map = match db.lock().unwrap().hset.get(key) {
-        Some(m) => m.clone(),
-        _ => return Value::Num(counter),
+    let Value::Bulk(hash) = &args[0] else {
+        return Value::Error("ERR: Hash must be a bulk string");
+    };
+    let Value::Bulk(key) = &args[1] else {
+        return Value::Error("ERR: Key must be a bulk string");
     };
 
-    if map.contains_key(field) {
+    if db.lock().unwrap().hset_contains(hash, key) {
         counter += 1;
     }
-
     Value::Num(counter)
 }
 
@@ -163,11 +175,10 @@ fn flushdb(args: Vec<Value>, db: DB) -> Value {
         return Value::Null;
     }
 
-    db.lock().unwrap().set.clear();
-    db.lock().unwrap().hset.clear();
+    db.lock().unwrap().set_clear();
+    db.lock().unwrap().hset_clear();
 
     std::fs::File::create("database.aof").unwrap();
-
     Value::Null
 }
 
@@ -180,16 +191,11 @@ fn set(args: Vec<Value>, db: DB) -> Value {
     let Value::Bulk(key) = &args[0] else {
         return Value::Error("ERR: Key must be a bulk string");
     };
-    println!("{key}");
-
     let Value::Bulk(value) = &args[1] else {
         return Value::Error("ERR: Value must be a bulk string");
     };
-    println!("{value}");
 
-    db.lock().unwrap().set.insert(key.into(), value.into());
-    println!("{:?}", db.lock().unwrap().set);
-
+    db.lock().unwrap().set_push(key.into(), value.into());
     Value::Str("OK")
 }
 
@@ -202,10 +208,7 @@ fn get(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Key wasn't registered in database");
     };
 
-    match db.lock().unwrap().set.get(key) {
-        Some(s) => Value::Bulk(s.into()),
-        _ => Value::Null,
-    }
+    db.lock().unwrap().set_get(key)
 }
 
 fn hset(args: Vec<Value>, db: DB) -> Value {
@@ -223,9 +226,7 @@ fn hset(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Incorrect definition for value");
     };
 
-    let map: HashMap<String, String> = HashMap::from([(key.into(), value.into())]);
-    db.lock().unwrap().hset.insert(hash.into(), map);
-
+    db.lock().unwrap().hset_push(hash.into(), key.into(), value.into());
     Value::Str("OK")
 }
 
@@ -241,15 +242,7 @@ fn hget(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Key must be a bulk string");
     };
 
-    let map = match db.lock().unwrap().hset.get(hash) {
-        Some(m) => m.clone(),
-        _ => { return Value::Null; },
-    };
-
-    match map.get(key) {
-        Some(s) => Value::Bulk(s.into()),
-        _ => Value::Null,
-    }
+    db.lock().unwrap().hset_get(hash, key)
 }
 
 fn del(args: Vec<Value>, db: DB) -> Value {
@@ -260,9 +253,8 @@ fn del(args: Vec<Value>, db: DB) -> Value {
     let mut counter = 0i64;
     for arg in args {
         if let Value::Bulk(key) = arg {
-            match db.lock().unwrap().set.remove(&key) {
-                Some(_) => counter += 1,
-                _ => (),
+            if db.lock().unwrap().set_remove(&key) {
+                counter += 1;
             };
         } else {
             continue;
@@ -280,7 +272,6 @@ fn hdel(args: Vec<Value>, db: DB) -> Value {
     }
 
     let mut counter = 0i64;
-
     let Value::Bulk(hash) = &args[0] else {
         return Value::Error("ERR: Wrong definition for hash");
     };
@@ -288,16 +279,9 @@ fn hdel(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong definition for key");
     };
 
-    let mut hmap = match db.lock().unwrap().hset.get(hash) {
-        Some(m) => m.clone(),
-        _ => { return Value::Num(counter); },
-    };
-    match hmap.remove(key) {
-        Some(_) => counter += 1,
-        _ => (),
-    };
-
-    db.lock().unwrap().hset.insert(hash.into(), hmap.into());
+    if db.lock().unwrap().hset_remove(hash, key) {
+        counter += 1;
+    }
     Value::Num(counter)
 }
 
@@ -310,30 +294,7 @@ fn incr(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Incorrect definition for key");
     };
 
-    let mut value = 0i64;
-    let mut err = "";
-    
-    db.lock().unwrap().set.entry(key.into())
-        .and_modify(|val| {
-            let v = match val.parse::<i64>() {
-                Ok(n) => n,
-                _ => {
-                    err = "ERR: Value is not an integer or out of range";
-                    return ();
-                },
-            };
-            value = v + 1;
-            *val = value.to_string()
-        })
-        .or_insert_with(|| {
-            value += 1;
-            value.to_string()
-        });
-
-    if err.len() != 0 {
-        return Value::Error(err);
-    }
-    Value::Num(value)
+    db.lock().unwrap().set_incr(key.into(), 1)
 }
 
 fn incr_by(args: Vec<Value>, db: DB) -> Value {
@@ -354,65 +315,18 @@ fn incr_by(args: Vec<Value>, db: DB) -> Value {
         _ => return Value::Error("ERR: Value is not an integer or out of range"),
     };
 
-    let mut value = 0i64;
-    let mut err = "";
-
-    db.lock().unwrap().set.entry(key.into())
-        .and_modify(|val| {
-            let v = match val.parse::<i64>() {
-                Ok(n) => n,
-                _ => {
-                    err = "ERR: Value is not an integer or out of range";
-                    return ();
-                },
-            };
-            value = v + incr;
-            *val = value.to_string();
-        }).or_insert_with(|| {
-            value += incr;
-            value.to_string()
-        });
-
-    if err.len() != 0 {
-        return Value::Error(err);
-    }
-    Value::Num(value)
+    db.lock().unwrap().set_incr(key.into(), incr)
 }
 
 fn decr(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments");
     }
-    
     let Value::Bulk(key) = &args[0] else {
         return Value::Error("ERR: Wrong definition for key");
     };
 
-    let mut value = 0i64;
-    let mut err = "";
-    
-    db.lock().unwrap().set.entry(key.into())
-        .and_modify(|val| {
-            let v = match val.parse::<i64>() {
-                Ok(n) => n,
-                _ => {
-                    err = "ERR: Value is not an integer or out of range";
-                    return ();
-                },
-            };
-
-            value = v - 1;
-            *val = value.to_string()
-        })
-        .or_insert_with(|| {
-            value -= 1;
-            value.to_string()
-        });
-
-    if err.len() != 0 {
-        return Value::Error(err);
-    }
-    Value::Num(value)
+    db.lock().unwrap().set_incr(key.into(), -1)
 }
 
 fn decr_by(args: Vec<Value>, db: DB) -> Value {
@@ -423,7 +337,6 @@ fn decr_by(args: Vec<Value>, db: DB) -> Value {
     let Value::Bulk(key) = &args[0] else {
         return Value::Error("ERR: Incorrect definition for key");
     };
-
     let Value::Bulk(decrement) = &args[1] else {
         return Value::Error("ERR: Value is not an integer or out of range");
     };
@@ -433,30 +346,7 @@ fn decr_by(args: Vec<Value>, db: DB) -> Value {
         _ => return Value::Error("ERR: Value is not an integer or out of range"),
     };
 
-    let mut value = 0i64;
-    let mut err = "";
-
-    db.lock().unwrap().set.entry(key.into())
-        .and_modify(|val| {
-            let v = match val.parse::<i64>() {
-                Ok(n) => n,
-                _ => {
-                    err = "ERR: Value is not an integer or out of range";
-                    return ();
-                },
-            };
-            value = v - decr;
-            *val = value.to_string()
-        })
-        .or_insert_with(|| {
-            value -= decr;
-            value.to_string()
-        });
-
-    if err.len() != 0 {
-        return Value::Error(err);
-    }
-    Value::Num(value)
+    db.lock().unwrap().set_incr(key.into(), -decr)
 }
 
 fn multi(args: Vec<Value>, db: DB) -> Value {
@@ -473,14 +363,14 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments");
     }
 
-    let transaction = db.lock().unwrap().multi.clone();
+    let transaction = db.lock().unwrap().multi_get();
     let values: Vec<Value> = transaction
         .iter()
         .map(|(args, handler)| {
             handler(args.clone(), Arc::clone(&db))
         })
         .collect();
-    db.lock().unwrap().multi.clear();
+    db.lock().unwrap().multi_clear();
 
     Value::Array(values)
 }
@@ -490,6 +380,6 @@ fn discard(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments");
     }
 
-    db.lock().unwrap().multi.clear();
+    db.lock().unwrap().multi_clear();
     Value::Str("OK")
 }
