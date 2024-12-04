@@ -108,8 +108,18 @@ impl Database {
         self.hset.insert(hash.into(), hmap);
         true
     }
-    pub fn hset_len(&self) -> usize {
-        self.hset.len()
+    pub fn hset_total_len(&self) -> usize {
+        let mut len = 0usize;
+        for map in self.hset.values() {
+            len += map.len();
+        }
+        len
+    }
+    pub fn hset_len(&self, hash: &String) -> usize {
+        match self.hset.get(hash) {
+            Some(m) => m.len(),
+            None => 0,
+        }
     }
     pub fn hset_clear(&mut self) {
         self.hset.clear()

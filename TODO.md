@@ -1,14 +1,12 @@
 # AmandaDB
 
 ### Todo
-- [ ] Organize arguments for HSET in key-value pairs
-- [ ] Organize arguments for HDEL in hash-key pairs
+- [ ] Write a driver
 - [ ] Pub/Sub
-- [ ] Transactions
-- [ ] Find some way to boost performance
+- [ ] Boost performance
 
 ### Done
 - [x] Reader, parser and writer
-- [x] PING
-- [x] GET, SET, HGET, HSET
+- [x] Basic commands
 - [x] Multithreading / Pipelining
+- [X] Transactions
