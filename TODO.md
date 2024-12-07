@@ -1,6 +1,7 @@
 # AmandaDB
 
 ### Todo
+- [ ] Persist transaction's changes
 - [ ] Write a driver
 - [ ] Pub/Sub
 - [ ] Boost performance
