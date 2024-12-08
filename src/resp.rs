@@ -184,6 +184,7 @@ impl Writer {
     pub fn write(&mut self, value: Value) -> Result<()> {
         let bytes = value.marshal();
         self.writer.write_all(&bytes)?;
+        self.writer.flush()?;
         Ok(())
     }
 }
