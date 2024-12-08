@@ -36,17 +36,13 @@ impl AOF {
         file.read_to_end(&mut data).unwrap();
 
         let input = std::str::from_utf8(&data).unwrap();
-
         let mut reader = Resp::new(&input);
-
         loop {
             let value = reader.read()?;
             match value {
                 Value::Null => break,
-                _ => (),
+                _ => func(value, Arc::clone(&db)),
             };
-
-            func(value, Arc::clone(&db));
         }
 
         Ok(())

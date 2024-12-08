@@ -1,7 +1,7 @@
 # AmandaDB
 
 ### Todo
-- [ ] Persist transaction's changes
+- [ ] Fix DEL and HDEL not persisting
 - [ ] Write a driver
 - [ ] Pub/Sub
 - [ ] Boost performance
