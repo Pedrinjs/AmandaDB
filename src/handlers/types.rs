@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::aof::AOF;
-use crate::error::Result;
+//use crate::aof::AOF;
+//use crate::error::Result;
 use crate::resp::Value;
 
 pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
@@ -10,20 +10,22 @@ pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
 pub struct Database {
     set: HashMap<String, String>,
     hset: HashMap<String, HashMap<String, String>>,
-    // Respectively: command name, command arguments, handler function
-    multi: Vec<(Value, Vec<Value>, Handler)>,
-    aof: AOF,
+    // Respectively: command's name and arguments
+    multi: Vec<(Value, Vec<Value>)>,
+    // aof: AOF,
     transaction_mode: bool,
+    //read_mode: bool,
 }
 
 impl Database {
-    pub fn new(aof: AOF) -> Self {
+    pub fn new(/*aof: AOF*/) -> Self {
         Self{
             set: HashMap::new(),
             hset: HashMap::new(),
             multi: Vec::new(),
-            aof,
+            // aof,
             transaction_mode: false,
+            //read_mode: false,
         }
     }
 
@@ -137,20 +139,27 @@ impl Database {
         map.contains_key(key)
     }
 
-    pub fn multi_push(&mut self, cmd: Value, args: Vec<Value>, handler: Handler) {
-        self.multi.push((cmd, args, handler))
+    pub fn multi_push(&mut self, cmd: Value, args: Vec<Value>) {
+        self.multi.push((cmd, args))
     }
-    pub fn multi_get(&self) -> Vec<(Value, Vec<Value>, Handler)> {
+    pub fn multi_get(&self) -> Vec<(Value, Vec<Value>)> {
         self.multi.clone()
     }
     pub fn multi_clear(&mut self) {
         self.multi.clear()
     }
 
-    pub fn aof_read(&mut self, func: fn(Value, Arc<Mutex<Database>>), db: Arc<Mutex<Database>>) -> Result<()> {
-        self.aof.read(func, db)
+    /*pub fn aof_read(&mut self, func: fn(Value, Arc<Mutex<Database>>), db: Arc<Mutex<Database>>) -> Result<()> {
+        self.read_mode = true;
+        self.aof.read(func, db)?;
+        self.read_mode = false;
+        Ok(())
     }
     pub fn aof_write(&mut self, value: Value) -> Result<()> {
         self.aof.write(value)
     }
+
+    pub fn is_read_mode(&self) -> bool {
+        self.read_mode
+    }*/
 }

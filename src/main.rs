@@ -32,23 +32,25 @@ fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
 
     let cmd = command.to_uppercase();
     let handler = handlers.get(cmd.as_str()).unwrap();
-    handler(args.to_vec(), db);
+    handler(args.to_vec(), Arc::clone(&db));
 }
 
 fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379")?;
     let pool = ThreadPool::new(4);
 
-    let aof = AOF::new("database.aof".into())?;
-    let db = Arc::new(Mutex::new(Database::new(aof)));
-    db.lock().unwrap().aof_read(handle_read, Arc::clone(&db))?;
+    let aof = Arc::new(Mutex::new(AOF::new("database.aof".into())?));
+    let db = Arc::new(Mutex::new(Database::new()));
+
+    aof.lock().unwrap().read(handle_read, Arc::clone(&db))?;
 
     for stream in listener.incoming() {
         let stream = stream?;
+        let aof = Arc::clone(&aof);
         let db = Arc::clone(&db);
 
         pool.execute(|| {
-            match handle_request(stream, db) {
+            match handle_request(stream, aof, db) {
                 Ok(_) => (),
                 Err(e) => println!("{e}"),
             };
@@ -58,7 +60,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn handle_request(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> Result<()> {
+fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Database>>) -> Result<()> {
     let mut buf = [0; 1024];
     stream.read(&mut buf)?;
     let request = from_utf8(&buf)?;
@@ -70,7 +72,7 @@ fn handle_request(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> Result<()>
     handlers.init();
     let mut writer = Writer::new(Box::new(stream));
 
-    let result = handlers.match_handler(value, db);
+    let result = handlers.match_handler(value, aof, db);
     if let Value::Error(err) = result {
         return Err(new_error(err));
     }
