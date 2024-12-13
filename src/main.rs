@@ -22,7 +22,7 @@ fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
     };
 
     let Value::Bulk(command) = &arr[0] else {
-        eprintln!("only array of bulk string");
+        eprintln!("only array of bulk strings");
         return;
     };
     let args = &arr[1..];
@@ -51,23 +51,27 @@ fn main() -> Result<()> {
         pool.execute(|| {
             if let Err(e) = handle_request(stream, aof, db) {
                 eprintln!("{e}");
-            };
+            }
         });
     };
+
+    println!("shutting down");
     Ok(())
 }
 
 fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Database>>) -> Result<()> {
     let mut buf = [0; 1024];
+
     loop {
         if stream.read(&mut buf)? == 0 {
-            return Err(new_error("ERR: Failed to read request"));
+            // it only returns OK because I am assuming the
+            // client closed the connection by it's own
+            return Ok(());
         }
 
         let request = from_utf8(&buf)?;
         let mut resp = Resp::new(request);
         let value = resp.read()?;
-        println!("{value:?}");
 
         let mut handlers = Handlers::new();
         handlers.init();
