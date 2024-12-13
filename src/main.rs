@@ -17,12 +17,12 @@ use thread::ThreadPool;
 
 fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
     let Value::Array(arr) = value else {
-        println!("array only!");
+        eprintln!("array only!");
         return;
     };
 
     let Value::Bulk(command) = &arr[0] else {
-        println!("how?");
+        eprintln!("only array of bulk string");
         return;
     };
     let args = &arr[1..];
@@ -48,12 +48,10 @@ fn main() -> Result<()> {
         let aof = Arc::clone(&aof);
         let db = Arc::clone(&db);
 
-        pool.execute(move || loop {
-            let stream = stream.try_clone().unwrap();
-            if let Err(e) = handle_request(stream, aof.clone(), db.clone()) {
-                println!("{e}");
-                break;
-            }
+        pool.execute(|| {
+            if let Err(e) = handle_request(stream, aof, db) {
+                eprintln!("{e}");
+            };
         });
     };
     Ok(())
@@ -61,22 +59,24 @@ fn main() -> Result<()> {
 
 fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Database>>) -> Result<()> {
     let mut buf = [0; 1024];
-    let n = stream.read(&mut buf)?;
-    if n == 0 {
-        return Err(new_error("ERR: Failed to read request"));
+    loop {
+        if stream.read(&mut buf)? == 0 {
+            return Err(new_error("ERR: Failed to read request"));
+        }
+
+        let request = from_utf8(&buf)?;
+        let mut resp = Resp::new(request);
+        let value = resp.read()?;
+        println!("{value:?}");
+
+        let mut handlers = Handlers::new();
+        handlers.init();
+        let mut writer = Writer::new(Box::new(stream.try_clone()?));
+
+        let result = handlers.match_handler(value, Arc::clone(&aof), Arc::clone(&db));
+        if let Value::Error(err) = result {
+            return Err(new_error(err));
+        }
+        writer.write(result)?
     }
-
-    let request = from_utf8(&buf)?;
-    let mut resp = Resp::new(request);
-    let value = resp.read()?;
-
-    let mut handlers = Handlers::new();
-    handlers.init();
-    let mut writer = Writer::new(Box::new(stream));
-
-    let result = handlers.match_handler(value, aof, db);
-    if let Value::Error(err) = result {
-        return Err(new_error(err));
-    }
-    writer.write(result)
 }
