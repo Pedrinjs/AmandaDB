@@ -66,6 +66,8 @@ impl<'a> Handlers<'a> {
     }
 
     pub fn init(&mut self) {
+        self.insert("COMMAND", command);
+
         self.insert("PING", ping);
         self.insert("ECHO", echo);
         self.insert("DBSIZE", dbsize);
@@ -87,6 +89,10 @@ impl<'a> Handlers<'a> {
         self.insert("EXEC", exec);
         self.insert("DISCARD", discard);
     }
+}
+
+fn command(_args: Vec<Value>, _db: DB) -> Value {
+    Value::Str("OK")
 }
 
 fn ping(args: Vec<Value>, _db: DB) -> Value {

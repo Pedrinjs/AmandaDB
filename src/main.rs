@@ -41,7 +41,6 @@ fn main() -> Result<()> {
 
     let aof = Arc::new(Mutex::new(AOF::new("database.aof".into())?));
     let db = Arc::new(Mutex::new(Database::new()));
-
     aof.lock().unwrap().read(handle_read, Arc::clone(&db))?;
 
     for stream in listener.incoming() {
@@ -49,22 +48,25 @@ fn main() -> Result<()> {
         let aof = Arc::clone(&aof);
         let db = Arc::clone(&db);
 
-        pool.execute(|| {
-            match handle_request(stream, aof, db) {
-                Ok(_) => (),
-                Err(e) => println!("{e}"),
-            };
+        pool.execute(move || loop {
+            let stream = stream.try_clone().unwrap();
+            if let Err(e) = handle_request(stream, aof.clone(), db.clone()) {
+                println!("{e}");
+                break;
+            }
         });
     };
-
     Ok(())
 }
 
 fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Database>>) -> Result<()> {
     let mut buf = [0; 1024];
-    stream.read(&mut buf)?;
-    let request = from_utf8(&buf)?;
+    let n = stream.read(&mut buf)?;
+    if n == 0 {
+        return Err(new_error("ERR: Failed to read request"));
+    }
 
+    let request = from_utf8(&buf)?;
     let mut resp = Resp::new(request);
     let value = resp.read()?;
 
