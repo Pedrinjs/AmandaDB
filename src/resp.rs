@@ -12,10 +12,10 @@ const ARRAY: u8 = '*' as u8;
 #[derive(Clone, Debug)]
 pub enum Value {
     Str(&'static str),
+    Error(&'static str),
     Num(i64),
     Bulk(String),
     Array(Vec<Value>),
-    Error(&'static str),
     Null,
 }
 
@@ -23,10 +23,10 @@ impl Value {
     pub fn marshal(self) -> Vec<u8> {
         match self {
             Value::Str(_) => self.marshal_string(),
+            Value::Error(_) => self.marshal_error(),
             Value::Num(_) => self.marshal_number(),
             Value::Bulk(_) => self.marshal_bulk(),
             Value::Array(_) => self.marshal_array(),
-            Value::Error(_) => self.marshal_error(),
             Value::Null => self.marshal_null(),
         }
     }
@@ -40,7 +40,18 @@ impl Value {
             bytes.append(&mut temp.to_vec());
         }
         bytes.extend(['\r' as u8, '\n' as u8]);
+        bytes
+    }
 
+    fn marshal_error(self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        bytes.push(ERROR);
+        if let Value::Error(e) = self {
+            let temp = e.as_bytes();
+            bytes.append(&mut temp.to_vec());
+        }
+        bytes.extend(['\r' as u8, '\n' as u8]);
         bytes
     }
 
@@ -66,7 +77,6 @@ impl Value {
             bytes.append(&mut bulk.into_bytes());
         }
         bytes.extend(['\r' as u8, '\n' as u8]);
-
         bytes
     }
 
@@ -83,25 +93,11 @@ impl Value {
                 bytes.append(&mut value.marshal());
             }
         }
-
-        bytes
-    }
-
-    fn marshal_error(self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::new();
-
-        bytes.push(ERROR);
-        if let Value::Error(err) = self {
-            let temp = err.as_bytes();
-            bytes.append(&mut temp.to_vec());
-        }
-        bytes.extend(['\r' as u8, '\n' as u8]);
-
         bytes
     }
 
     fn marshal_null(self) -> Vec<u8> {
-        String::from("$-1\r\n").into_bytes()
+        String::from("_\r\n").into_bytes()
     }
 }
 
