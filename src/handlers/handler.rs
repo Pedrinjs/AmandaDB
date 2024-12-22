@@ -47,10 +47,14 @@ impl<'a> Handlers<'a> {
             
             let command_list = vec!["SET", "HSET", "DEL", "HDEL", "INCR", "INCRBY", "DECR", "DECRBY"];
             if command_list.contains(&cmd) {
-                match aof.lock().unwrap().write(input) {
-                    Ok(_) => (),
-                    Err(_) => return Value::Error("ERR: Failed to append to AOF"),
-                };
+                if db.lock().unwrap().is_execution_mode() {
+                    aof.lock().unwrap().enqueue(input);
+                } else {
+                    match aof.lock().unwrap().write(input) {
+                        Ok(_) => (),
+                        Err(_) => return Value::Error("ERR: Failed to append to AOF"),
+                    };
+                }
             }
             return handler(args.to_vec(), db);
         }
@@ -367,19 +371,35 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
     handlers.init();
 
     let transaction = db.lock().unwrap().multi_get();
-    let values: Vec<Value> = transaction
-        .iter()
-        .map(|(cmd, args/*, handler*/)| {
-            let mut input: Vec<Value> = Vec::new();
-            input.push(cmd.clone());
-            input.extend_from_slice(&args);
+    let mut values: Vec<Value> = Vec::new();
+    let mut error = "";
 
-            handlers.match_handler(Value::Array(input), Arc::clone(&aof), Arc::clone(&db))
-        })
-        .collect();
+    db.lock().unwrap().set_execution_mode(true);
+    for (cmd, args) in transaction.iter() {
+        let mut input: Vec<Value> = Vec::new();
+        input.push(cmd.clone());
+        input.extend_from_slice(&args);
 
+        let copy = db.lock().unwrap().create_database_copy();
+        let value = handlers.match_handler(Value::Array(input), Arc::clone(&aof), Arc::clone(&db));
+        if let Value::Error(err) = value.clone() {
+            db.lock().unwrap().database_revert(copy);
+            error = err;
+            values.clear();
+            break;
+        }
+        values.push(value)
+    }
     db.lock().unwrap().multi_clear();
-    Value::Array(values)
+    db.lock().unwrap().set_execution_mode(false);
+
+    if values.len() == 0 {
+        return Value::Error(error);
+    }
+    match Arc::clone(&aof).lock().unwrap().write_queued() {
+        Ok(_) => Value::Array(values),
+        Err(_) => Value::Error("ERR: Failed to write to AOF"),
+    }
 }
 
 fn discard(args: Vec<Value>, db: DB) -> Value {

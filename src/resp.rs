@@ -97,7 +97,7 @@ impl Value {
     }
 
     fn marshal_null(self) -> Vec<u8> {
-        String::from("_\r\n").into_bytes()
+        String::from("$-1\r\n").into_bytes()
     }
 }
 

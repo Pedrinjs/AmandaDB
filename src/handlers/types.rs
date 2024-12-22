@@ -1,31 +1,27 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-//use crate::aof::AOF;
-//use crate::error::Result;
 use crate::resp::Value;
 
 pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
 
+#[derive(Clone)]
 pub struct Database {
     set: HashMap<String, String>,
     hset: HashMap<String, HashMap<String, String>>,
-    // Respectively: command's name and arguments
     multi: Vec<(Value, Vec<Value>)>,
-    // aof: AOF,
     transaction_mode: bool,
-    //read_mode: bool,
+    execution_mode: bool,
 }
 
 impl Database {
-    pub fn new(/*aof: AOF*/) -> Self {
+    pub fn new() -> Self {
         Self{
             set: HashMap::new(),
             hset: HashMap::new(),
             multi: Vec::new(),
-            // aof,
             transaction_mode: false,
-            //read_mode: false,
+            execution_mode: false,
         }
     }
 
@@ -34,6 +30,13 @@ impl Database {
     }
     pub fn set_transaction_mode(&mut self, state: bool) {
         self.transaction_mode = state
+    }
+
+    pub fn is_execution_mode(&self) -> bool {
+        self.execution_mode
+    }
+    pub fn set_execution_mode(&mut self, state: bool) {
+        self.execution_mode = state
     }
 
     pub fn set_push(&mut self, key: String, value: String) {
@@ -149,17 +152,20 @@ impl Database {
         self.multi.clear()
     }
 
-    /*pub fn aof_read(&mut self, func: fn(Value, Arc<Mutex<Database>>), db: Arc<Mutex<Database>>) -> Result<()> {
-        self.read_mode = true;
-        self.aof.read(func, db)?;
-        self.read_mode = false;
-        Ok(())
+    pub fn create_database_copy(&self) -> Self {
+        Self {
+            set: self.set.clone(),
+            hset: self.hset.clone(),
+            multi: self.multi.clone(),
+            transaction_mode: self.transaction_mode,
+            execution_mode: self.execution_mode,
+        }
     }
-    pub fn aof_write(&mut self, value: Value) -> Result<()> {
-        self.aof.write(value)
+    pub fn database_revert(&mut self, copy: Database) {
+        self.set = copy.set;
+        self.hset = copy.hset;
+        self.multi = copy.multi;
+        self.transaction_mode = copy.transaction_mode;
+        self.execution_mode = copy.execution_mode;
     }
-
-    pub fn is_read_mode(&self) -> bool {
-        self.read_mode
-    }*/
 }

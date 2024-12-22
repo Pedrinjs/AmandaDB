@@ -24,8 +24,10 @@ redis-cli
 
 ## Features
 - Basic redis commands
+- Full RESP2 support
 - `redis-cli` support
 - Multithreading
+- Transactions
 
 ## Docs
 Although this current project isn't fully compatible, you can read the official docs for Redis in <https://redis.io/docs/latest/>

@@ -10,6 +10,7 @@ type DB = Arc<Mutex<Database>>;
 
 pub struct AOF {
     file: File,
+    insert_queue: Vec<Value>,
 }
 
 impl AOF {
@@ -20,7 +21,7 @@ impl AOF {
             .create(true)
             .open(&path)?;
 
-        Ok(Self { file })
+        Ok(Self { file, insert_queue: Vec::new() })
     }
 
     pub fn read(&mut self, func: fn(Value, DB), db: DB) -> Result<()> {
@@ -50,6 +51,17 @@ impl AOF {
     pub fn write(&mut self, value: Value) -> Result<()> {
         self.file.write_all(&value.marshal())?;
         self.file.sync_all()?;
+        Ok(())
+    }
+
+    pub fn enqueue(&mut self, value: Value) {
+        self.insert_queue.push(value);
+    }
+    pub fn write_queued(&mut self) -> Result<()> {
+        for value in self.insert_queue.clone().iter() {
+            self.write(value.clone())?;
+        }
+        self.insert_queue.clear();
         Ok(())
     }
 }
