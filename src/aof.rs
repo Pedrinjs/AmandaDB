@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::error::Result;
 use crate::handlers::types::Database;
-use crate::resp::{Resp, Value};
+use crate::resp::{reader::RESP, value::Value};
 
 type DB = Arc<Mutex<Database>>;
 
@@ -34,7 +34,7 @@ impl AOF {
         self.file.read_to_end(&mut data)?;
 
         let input = std::str::from_utf8(&data)?;
-        let mut reader = Resp::new(&input);
+        let mut reader = RESP::new(&input);
         loop {
             let value = reader.read()?;
             match value {

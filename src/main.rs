@@ -12,7 +12,7 @@ mod thread;
 use aof::AOF;
 use error::{new_error, Result};
 use handlers::{handler::Handlers, types::Database};
-use resp::{Resp, Value, Writer};
+use resp::{reader::RESP, value::Value, writer::Writer};
 use thread::ThreadPool;
 
 fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
@@ -70,7 +70,7 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Dat
         }
 
         let request = from_utf8(&buf)?;
-        let mut resp = Resp::new(request);
+        let mut resp = RESP::new(request);
         let value = resp.read()?;
 
         let mut handlers = Handlers::new();

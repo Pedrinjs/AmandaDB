@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use super::types::{Database, Handler};
 use crate::aof::AOF;
-use crate::resp::Value;
+use crate::resp::value::Value;
 
 type Aof = Arc<Mutex<AOF>>;
 type DB = Arc<Mutex<Database>>;
