@@ -6,7 +6,8 @@ clean:
 	@rm -rf target/*
 	@cargo clean
 
-run: cargo run
+run:
+	cargo run
 
 build: @cargo build --release
 
