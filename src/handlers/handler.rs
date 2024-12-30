@@ -362,7 +362,7 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments");
     }
 
-    let aof = Arc::new(Mutex::new(match AOF::new("database.aof".into()) {
+    let aof = Arc::new(Mutex::new(match AOF::new("database.aof") {
         Ok(file) => file,
         Err(_) => return Value::Error("ERR: Failed to access AOF"),
     }));
@@ -375,14 +375,15 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
     let mut error = "";
 
     db.lock().unwrap().set_execution_mode(true);
-    for (cmd, args) in transaction.iter() {
+    for (cmd, args) in transaction.into_iter() {
         let mut input: Vec<Value> = Vec::new();
-        input.push(cmd.clone());
-        input.extend_from_slice(&args);
+        input.push(cmd);
+        input.extend(args);
+        let command = Value::Array(input);
 
         let copy = db.lock().unwrap().create_database_copy();
-        let value = handlers.match_handler(Value::Array(input), Arc::clone(&aof), Arc::clone(&db));
-        if let Value::Error(err) = value.clone() {
+        let value = handlers.match_handler(command, aof.clone(), db.clone());
+        if let Value::Error(err) = value {
             db.lock().unwrap().database_revert(copy);
             error = err;
             values.clear();

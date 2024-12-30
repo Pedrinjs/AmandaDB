@@ -39,7 +39,7 @@ fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379")?;
     let pool = ThreadPool::new(4);
 
-    let aof = Arc::new(Mutex::new(AOF::new("database.aof".into())?));
+    let aof = Arc::new(Mutex::new(AOF::new("database.aof")?));
     let db = Arc::new(Mutex::new(Database::new()));
     aof.lock().unwrap().read(handle_read, Arc::clone(&db))?;
 
@@ -77,7 +77,7 @@ fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Dat
         handlers.init();
         let mut writer = Writer::new(Box::new(stream.try_clone()?));
 
-        let result = handlers.match_handler(value, Arc::clone(&aof), Arc::clone(&db));
+        let result = handlers.match_handler(value, aof.clone(), db.clone());
         if let Value::Error(err) = result {
             return Err(new_error(err));
         }

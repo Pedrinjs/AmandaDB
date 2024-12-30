@@ -14,12 +14,12 @@ pub struct AOF {
 }
 
 impl AOF {
-    pub fn new(path: String) -> Result<Self> {
+    pub fn new(path: impl Into<String>) -> Result<Self> {
         let file = File::options()
             .read(true)
             .write(true)
             .create(true)
-            .open(&path)?;
+            .open(path.into())?;
 
         Ok(Self { file, insert_queue: Vec::new() })
     }
@@ -39,12 +39,9 @@ impl AOF {
             let value = reader.read()?;
             match value {
                 Value::Null => break,
-                _ => (),
+                _ => func(value, Arc::clone(&db)),
             };
-
-            func(value, Arc::clone(&db));
         }
-
         Ok(())
     }
 
@@ -58,8 +55,8 @@ impl AOF {
         self.insert_queue.push(value);
     }
     pub fn write_queued(&mut self) -> Result<()> {
-        for value in self.insert_queue.clone().iter() {
-            self.write(value.clone())?;
+        for value in self.insert_queue.clone() {
+            self.write(value)?;
         }
         self.insert_queue.clear();
         Ok(())

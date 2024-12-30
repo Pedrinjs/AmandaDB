@@ -5,7 +5,7 @@ use crate::resp::value::Value;
 
 pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
 
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct Database {
     set: HashMap<String, String>,
     hset: HashMap<String, HashMap<String, String>>,
