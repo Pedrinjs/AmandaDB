@@ -3,7 +3,7 @@ AmandaDB is a simple Redis clone built with Rust standart library, compatible wi
 
 ## Features
 - Basic redis commands
-- Full RESP2 support
+- RESP3 support (expect for Big numbers and Verbatim strings)
 - `redis-cli` support
 - Multithreading
 - Transactions

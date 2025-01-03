@@ -27,7 +27,7 @@ impl<'a> Handlers<'a> {
             return Value::Error("ERR: An empty array was provided");
         }
 
-        let Value::Bulk(command) = &arr[0] else {
+        let Value::BulkStr(command) = &arr[0] else {
             return Value::Error("ERR: The command must be a bulk string");
         };
 
@@ -41,7 +41,7 @@ impl<'a> Handlers<'a> {
 
             let args = &arr[1..];
             if db.lock().unwrap().is_transaction_mode() {
-                db.lock().unwrap().multi_push(Value::Bulk(command.into()), args.to_vec());
+                db.lock().unwrap().multi_push(Value::BulkStr(command.into()), args.to_vec());
                 return Value::Str("QUEUED");
             }
             
@@ -107,8 +107,8 @@ fn ping(args: Vec<Value>, _db: DB) -> Value {
     if args.len() == 0 {
         return Value::Str("PONG");
     }
-    if let Value::Bulk(name) = &args[0] {
-        return Value::Bulk(name.into());
+    if let Value::BulkStr(name) = &args[0] {
+        return Value::BulkStr(name.into());
     }
     return Value::Str("PONG");
 }
@@ -118,8 +118,8 @@ fn echo(args: Vec<Value>, _db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    if let Value::Bulk(name) = &args[0] {
-        return Value::Bulk(name.into());
+    if let Value::BulkStr(name) = &args[0] {
+        return Value::BulkStr(name.into());
     }
     return Value::Error("ERR: Argument must be a bulk string");
 }
@@ -140,7 +140,7 @@ fn hlen(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    if let Value::Bulk(hash) = &args[0] {
+    if let Value::BulkStr(hash) = &args[0] {
         let len = db.lock().unwrap().hset_len(hash);
         return Value::Num(len as i64)
     }
@@ -154,7 +154,7 @@ fn exists(args: Vec<Value>, db: DB) -> Value {
 
     let mut counter = 0i64;
     args.iter().for_each(|val| {
-        if let Value::Bulk(key) = val {
+        if let Value::BulkStr(key) = val {
             if db.lock().unwrap().set_contains(&key) {
                 counter += 1;
             }
@@ -170,7 +170,7 @@ fn hexists(args: Vec<Value>, db: DB) -> Value {
 
     let mut counter = 0i64;
     args.chunks(2).for_each(|arg| {
-        if let [Value::Bulk(hash), Value::Bulk(key)] = arg {
+        if let [Value::BulkStr(hash), Value::BulkStr(key)] = arg {
             if db.lock().unwrap().hset_contains(hash, key) {
                 counter += 1;
             }
@@ -195,10 +195,10 @@ fn set(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    let Value::Bulk(key) = &args[0] else {
+    let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Key must be a bulk string");
     };
-    let Value::Bulk(value) = &args[1] else {
+    let Value::BulkStr(value) = &args[1] else {
         return Value::Error("ERR: Value must be a bulk string");
     };
 
@@ -211,7 +211,7 @@ fn get(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    let Value::Bulk(key) = &args[0] else {
+    let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Key wasn't registered in database");
     };
 
@@ -223,13 +223,13 @@ fn hset(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    let Value::Bulk(hash) = &args[0] else {
+    let Value::BulkStr(hash) = &args[0] else {
         return Value::Error("ERR: Incorrect definition for hash");
     };
-    let Value::Bulk(key) = &args[1] else {
+    let Value::BulkStr(key) = &args[1] else {
         return Value::Error("ERR: Incorrect definition for key");
     };
-    let Value::Bulk(value) = &args[2] else {
+    let Value::BulkStr(value) = &args[2] else {
         return Value::Error("ERR: Incorrect definition for value");
     };
 
@@ -242,10 +242,10 @@ fn hget(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    let Value::Bulk(hash) = &args[0] else {
+    let Value::BulkStr(hash) = &args[0] else {
         return Value::Error("ERR: Hash must be a bulk string");
     };
-    let Value::Bulk(key) = &args[1] else {
+    let Value::BulkStr(key) = &args[1] else {
         return Value::Error("ERR: Key must be a bulk string");
     };
 
@@ -259,7 +259,7 @@ fn del(args: Vec<Value>, db: DB) -> Value {
 
     let mut counter = 0i64;
     args.iter().for_each(|arg| {
-        if let Value::Bulk(key) = arg {
+        if let Value::BulkStr(key) = arg {
             if db.lock().unwrap().set_remove(&key) {
                 counter += 1;
             }
@@ -275,7 +275,7 @@ fn hdel(args: Vec<Value>, db: DB) -> Value {
 
     let mut counter = 0i64;
     args.chunks(2).for_each(|arg| {
-        if let [Value::Bulk(hash), Value::Bulk(key)] = arg {
+        if let [Value::BulkStr(hash), Value::BulkStr(key)] = arg {
             if db.lock().unwrap().hset_remove(hash, key) {
                 counter += 1;
             }
@@ -290,7 +290,7 @@ fn incr(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Incorrect number of arguments");
     }
 
-    let Value::Bulk(key) = &args[0] else {
+    let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Incorrect definition for key");
     };
 
@@ -302,11 +302,11 @@ fn incr_by(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments");
     }
 
-    let Value::Bulk(key) = &args[0] else {
+    let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Wrong definition for key");
     };
 
-    let Value::Bulk(increment) = &args[1] else {
+    let Value::BulkStr(increment) = &args[1] else {
         return Value::Error("ERR: Value is not an integer or out of range");
     };
 
@@ -322,7 +322,7 @@ fn decr(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments");
     }
-    let Value::Bulk(key) = &args[0] else {
+    let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Wrong definition for key");
     };
 
@@ -334,10 +334,10 @@ fn decr_by(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments");
     }
 
-    let Value::Bulk(key) = &args[0] else {
+    let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Incorrect definition for key");
     };
-    let Value::Bulk(decrement) = &args[1] else {
+    let Value::BulkStr(decrement) = &args[1] else {
         return Value::Error("ERR: Value is not an integer or out of range");
     };
 
@@ -372,21 +372,18 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
 
     let transaction = db.lock().unwrap().multi_get();
     let mut values: Vec<Value> = Vec::new();
-    let mut error = "";
 
     db.lock().unwrap().set_execution_mode(true);
+    let copy = db.lock().unwrap().create_database_copy();
     for (cmd, args) in transaction.into_iter() {
         let mut input: Vec<Value> = Vec::new();
         input.push(cmd);
         input.extend(args);
         let command = Value::Array(input);
 
-        let copy = db.lock().unwrap().create_database_copy();
         let value = handlers.match_handler(command, aof.clone(), db.clone());
-        if let Value::Error(err) = value {
+        if let Value::Error(_) = value {
             db.lock().unwrap().database_revert(copy);
-            error = err;
-            values.clear();
             break;
         }
         values.push(value)
@@ -394,9 +391,6 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
     db.lock().unwrap().multi_clear();
     db.lock().unwrap().set_execution_mode(false);
 
-    if values.len() == 0 {
-        return Value::Error(error);
-    }
     match Arc::clone(&aof).lock().unwrap().write_queued() {
         Ok(_) => Value::Array(values),
         Err(_) => Value::Error("ERR: Failed to write to AOF"),

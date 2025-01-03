@@ -21,7 +21,7 @@ fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
         return;
     };
 
-    let Value::Bulk(command) = &arr[0] else {
+    let Value::BulkStr(command) = &arr[0] else {
         eprintln!("only array of bulk strings");
         return;
     };

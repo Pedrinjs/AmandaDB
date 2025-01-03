@@ -1,6 +1,6 @@
 use std::io::{BufReader, Bytes, Read};
 
-use super::{constants::{ARRAY, BULK}, value::Value};
+use super::{constants::{ARRAY, BULKSTR, CR}, value::Value};
 use crate::error::Result;
 
 pub struct RESP<'a> {
@@ -19,7 +19,7 @@ impl<'a> RESP<'a> {
         while let Some(Ok(b)) = self.reader.next() {
             line.push(b);
             
-            if line.len() >= 2 && line[line.len()-2] == ('\r' as u8) {
+            if line.len() >= 2 && line[line.len()-2] == CR {
                 break;
             }
         }
@@ -43,7 +43,7 @@ impl<'a> RESP<'a> {
 
         Ok(match _type {
             ARRAY => self.read_array()?,
-            BULK => self.read_bulk()?,
+            BULKSTR => self.read_bulk()?,
             _ => {
                 println!("Unknwon type: {:?}", _type as char);
                 Value::Null
@@ -55,7 +55,7 @@ impl<'a> RESP<'a> {
         let len = self.read_integer()?;
         let mut value: Vec<Value> = Vec::new();
 
-        for _ in 1..=len {
+        for _ in 0..len {
             let temp = self.read()?;
             value.push(temp);
         }
@@ -66,6 +66,6 @@ impl<'a> RESP<'a> {
     fn read_bulk(&mut self) -> Result<Value> {
         let _len = self.read_integer()?;
         let value = String::from_utf8_lossy(&self.read_line()).to_string();
-        Ok(Value::Bulk(value))
+        Ok(Value::BulkStr(value))
     }
 }

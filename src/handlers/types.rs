@@ -5,7 +5,6 @@ use crate::resp::value::Value;
 
 pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
 
-//#[derive(Clone)]
 pub struct Database {
     set: HashMap<String, String>,
     hset: HashMap<String, HashMap<String, String>>,
@@ -44,7 +43,7 @@ impl Database {
     }
     pub fn set_get(&self, key: &String) -> Value {
         match self.set.get(key) {
-            Some(value) => Value::Bulk(value.into()),
+            Some(value) => Value::BulkStr(value.into()),
             None => Value::Null,
         }
     }
@@ -101,7 +100,7 @@ impl Database {
         };
 
         match map.get(key) {
-            Some(value) => Value::Bulk(value.into()),
+            Some(value) => Value::BulkStr(value.into()),
             None => Value::Null,
         }
     }
