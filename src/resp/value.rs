@@ -29,6 +29,13 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn is_error(&self) -> Option<&str> {
+        if let Value::Error(e) = self {
+            return Some(e);
+        }
+        None
+    }
+
     pub fn marshal(self) -> Vec<u8> {
         match self {
             Value::Str(_) => self.marshal_string(),
