@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use super::types::{Database, Handler};
 use crate::aof::AOF;
 use crate::resp::value::Value;
 
-type Aof = Arc<Mutex<AOF>>;
-type DB = Arc<Mutex<Database>>;
+type Aof = Arc<RwLock<AOF>>;
+type DB = Arc<RwLock<Database>>;
 
 pub struct Handlers<'a> {
     handlers: HashMap<&'a str, Handler>,
@@ -36,21 +36,21 @@ impl<'a> Handlers<'a> {
 
         if let Some(handler) = self.get(cmd) {
             if cmd == "EXEC" || cmd == "DISCARD" {
-                db.lock().unwrap().set_transaction_mode(false);
+                db.write().unwrap().set_transaction_mode(false);
             }
 
             let args = &arr[1..];
-            if db.lock().unwrap().is_transaction_mode() {
-                db.lock().unwrap().multi_push(Value::BulkStr(command.into()), args.to_vec());
+            if db.read().unwrap().is_transaction_mode() {
+                db.write().unwrap().multi_push(Value::BulkStr(command.into()), args.to_vec());
                 return Value::Str("QUEUED");
             }
             
             let command_list = vec!["SET", "HSET", "DEL", "HDEL", "INCR", "INCRBY", "DECR", "DECRBY"];
             if command_list.contains(&cmd) {
-                if db.lock().unwrap().is_execution_mode() {
-                    aof.lock().unwrap().enqueue(input);
+                if db.read().unwrap().is_execution_mode() {
+                    aof.write().unwrap().enqueue(input);
                 } else {
-                    match aof.lock().unwrap().write(input) {
+                    match aof.write().unwrap().write(input) {
                         Ok(_) => (),
                         Err(_) => return Value::Error("ERR: Failed to append to AOF"),
                     };
@@ -129,8 +129,8 @@ fn dbsize(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments provided");
     }
 
-    let set_len = db.lock().unwrap().set_len();
-    let hset_len = db.lock().unwrap().hset_total_len();
+    let set_len = db.read().unwrap().set_len();
+    let hset_len = db.read().unwrap().hset_total_len();
     let total_len: i64 = (set_len + hset_len) as i64;
     Value::Num(total_len)
 }
@@ -141,7 +141,7 @@ fn hlen(args: Vec<Value>, db: DB) -> Value {
     }
 
     if let Value::BulkStr(hash) = &args[0] {
-        let len = db.lock().unwrap().hset_len(hash);
+        let len = db.read().unwrap().hset_len(hash);
         return Value::Num(len as i64)
     }
     Value::Error("ERR: Argument must be a bulk string")
@@ -155,7 +155,7 @@ fn exists(args: Vec<Value>, db: DB) -> Value {
     let mut counter = 0i64;
     args.iter().for_each(|val| {
         if let Value::BulkStr(key) = val {
-            if db.lock().unwrap().set_contains(&key) {
+            if db.read().unwrap().set_contains(&key) {
                 counter += 1;
             }
         }
@@ -171,7 +171,7 @@ fn hexists(args: Vec<Value>, db: DB) -> Value {
     let mut counter = 0i64;
     args.chunks(2).for_each(|arg| {
         if let [Value::BulkStr(hash), Value::BulkStr(key)] = arg {
-            if db.lock().unwrap().hset_contains(hash, key) {
+            if db.read().unwrap().hset_contains(hash, key) {
                 counter += 1;
             }
         }
@@ -184,8 +184,8 @@ fn flushdb(args: Vec<Value>, db: DB) -> Value {
         return Value::Null;
     }
 
-    db.lock().unwrap().set_clear();
-    db.lock().unwrap().hset_clear();
+    db.write().unwrap().set_clear();
+    db.write().unwrap().hset_clear();
     std::fs::File::create("database.aof").unwrap();
     Value::Null
 }
@@ -202,7 +202,7 @@ fn set(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Value must be a bulk string");
     };
 
-    db.lock().unwrap().set_push(key.into(), value.into());
+    db.write().unwrap().set_push(key.into(), value.into());
     Value::Str("OK")
 }
 
@@ -215,7 +215,7 @@ fn get(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Key wasn't registered in database");
     };
 
-    db.lock().unwrap().set_get(key)
+    db.read().unwrap().set_get(key)
 }
 
 fn hset(args: Vec<Value>, db: DB) -> Value {
@@ -233,7 +233,7 @@ fn hset(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Incorrect definition for value");
     };
 
-    db.lock().unwrap().hset_push(hash.into(), key.into(), value.into());
+    db.write().unwrap().hset_push(hash.into(), key.into(), value.into());
     Value::Str("OK")
 }
 
@@ -249,7 +249,7 @@ fn hget(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Key must be a bulk string");
     };
 
-    db.lock().unwrap().hset_get(hash, key)
+    db.read().unwrap().hset_get(hash, key)
 }
 
 fn del(args: Vec<Value>, db: DB) -> Value {
@@ -260,7 +260,7 @@ fn del(args: Vec<Value>, db: DB) -> Value {
     let mut counter = 0i64;
     args.iter().for_each(|arg| {
         if let Value::BulkStr(key) = arg {
-            if db.lock().unwrap().set_remove(&key) {
+            if db.write().unwrap().set_remove(&key) {
                 counter += 1;
             }
         }
@@ -276,7 +276,7 @@ fn hdel(args: Vec<Value>, db: DB) -> Value {
     let mut counter = 0i64;
     args.chunks(2).for_each(|arg| {
         if let [Value::BulkStr(hash), Value::BulkStr(key)] = arg {
-            if db.lock().unwrap().hset_remove(hash, key) {
+            if db.write().unwrap().hset_remove(hash, key) {
                 counter += 1;
             }
         }
@@ -294,7 +294,7 @@ fn incr(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Incorrect definition for key");
     };
 
-    db.lock().unwrap().set_incr(key.into(), 1)
+    db.write().unwrap().set_incr(key.into(), 1)
 }
 
 fn incr_by(args: Vec<Value>, db: DB) -> Value {
@@ -315,7 +315,7 @@ fn incr_by(args: Vec<Value>, db: DB) -> Value {
         _ => return Value::Error("ERR: Value is not an integer or out of range"),
     };
 
-    db.lock().unwrap().set_incr(key.into(), incr)
+    db.write().unwrap().set_incr(key.into(), incr)
 }
 
 fn decr(args: Vec<Value>, db: DB) -> Value {
@@ -326,7 +326,7 @@ fn decr(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong definition for key");
     };
 
-    db.lock().unwrap().set_incr(key.into(), -1)
+    db.write().unwrap().set_incr(key.into(), -1)
 }
 
 fn decr_by(args: Vec<Value>, db: DB) -> Value {
@@ -346,14 +346,14 @@ fn decr_by(args: Vec<Value>, db: DB) -> Value {
         _ => return Value::Error("ERR: Value is not an integer or out of range"),
     };
 
-    db.lock().unwrap().set_incr(key.into(), -decr)
+    db.write().unwrap().set_incr(key.into(), -decr)
 }
 
 fn multi(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 0 {
         return Value::Error("ERR: Wrong number of arguments");
     }
-    db.lock().unwrap().set_transaction_mode(true);
+    db.write().unwrap().set_transaction_mode(true);
     Value::Str("OK")
 }
 
@@ -362,7 +362,8 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
         return Value::Error("ERR: Wrong number of arguments");
     }
 
-    let aof = Arc::new(Mutex::new(match AOF::new("database.aof") {
+    let config = db.read().unwrap().config();
+    let aof = Arc::new(RwLock::new(match AOF::new(config) {
         Ok(file) => file,
         Err(_) => return Value::Error("ERR: Failed to access AOF"),
     }));
@@ -370,11 +371,11 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
     let mut handlers = Handlers::new();
     handlers.init();
 
-    let transaction = db.lock().unwrap().multi_get();
+    let transaction = db.read().unwrap().multi_get();
     let mut values: Vec<Value> = Vec::new();
 
-    db.lock().unwrap().set_execution_mode(true);
-    let copy = db.lock().unwrap().create_database_copy();
+    db.write().unwrap().set_execution_mode(true);
+    let copy = db.read().unwrap().create_database_copy();
     for (cmd, args) in transaction.into_iter() {
         let mut input: Vec<Value> = Vec::new();
         input.push(cmd);
@@ -383,15 +384,15 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
 
         let value = handlers.match_handler(command, aof.clone(), db.clone());
         if let Value::Error(_) = value {
-            db.lock().unwrap().database_revert(copy);
+            db.write().unwrap().database_revert(copy);
             break;
         }
         values.push(value)
     }
-    db.lock().unwrap().multi_clear();
-    db.lock().unwrap().set_execution_mode(false);
+    db.write().unwrap().multi_clear();
+    db.write().unwrap().set_execution_mode(false);
 
-    match Arc::clone(&aof).lock().unwrap().write_queued() {
+    match Arc::clone(&aof).write().unwrap().write_queued() {
         Ok(_) => Value::Array(values),
         Err(_) => Value::Error("ERR: Failed to write to AOF"),
     }
@@ -401,6 +402,6 @@ fn discard(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 0 {
         return Value::Error("ERR: Wrong number of arguments");
     }
-    db.lock().unwrap().multi_clear();
+    db.write().unwrap().multi_clear();
     Value::Str("OK")
 }

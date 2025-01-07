@@ -1,8 +1,9 @@
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use crate::aof::AOF;
+use crate::config::Config;
 use crate::error::{new_error, Result};
 use crate::handlers::{handler::Handlers, types::Database};
 use crate::resp::{reader::RESP, writer::Writer};
@@ -14,17 +15,18 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(port: usize) -> Result<Self> {
-        let addr = format!("127.0.0.1:{port}");
+    pub fn new(config: Config) -> Result<Self> {
+        let addr = format!("127.0.0.1:{}", config.port());
         let listener = TcpListener::bind(addr)?;
+        let pool = ThreadPool::new(config.threads());
         
         Ok(Self {
             listener,
-            pool: ThreadPool::new(4),
+            pool,
         })
     }
 
-    pub fn listen(&self, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Database>>) -> Result<()> {
+    pub fn listen(&self, aof: Arc<RwLock<AOF>>, db: Arc<RwLock<Database>>) -> Result<()> {
         for stream in self.listener.incoming() {
             let stream = stream?;
             let aof = Arc::clone(&aof);
@@ -41,7 +43,7 @@ impl Server {
     }
 }
 
-fn handle_request(mut stream: TcpStream, aof: Arc<Mutex<AOF>>, db: Arc<Mutex<Database>>) -> Result<()> {
+fn handle_request(mut stream: TcpStream, aof: Arc<RwLock<AOF>>, db: Arc<RwLock<Database>>) -> Result<()> {
     let mut buffer = [0; 1024];
 
     loop {

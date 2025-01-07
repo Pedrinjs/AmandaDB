@@ -1,6 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 mod aof;
+mod config;
 mod error;
 mod handlers;
 mod resp;
@@ -8,12 +9,13 @@ mod server;
 mod thread;
 
 use aof::AOF;
+use config::Config;
 use error::Result;
 use handlers::{handler::Handlers, types::Database};
 use resp::value::Value;
 use server::Server;
 
-fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
+fn handle_read(value: Value, db: Arc<RwLock<Database>>) {
     let Value::Array(arr) = value else {
         eprintln!("array only!");
         return;
@@ -34,9 +36,12 @@ fn handle_read(value: Value, db: Arc<Mutex<Database>>) {
 }
 
 fn main() -> Result<()> {
-    let server = Server::new(6379)?;
-    let aof = Arc::new(Mutex::new(AOF::new("database.aof")?));
-    let db = Arc::new(Mutex::new(Database::new()));
-    aof.lock().unwrap().read(handle_read, Arc::clone(&db))?;
+    let config = Config::default();
+
+    let server = Server::new(config)?;
+    let aof = Arc::new(RwLock::new(AOF::new(config)?));
+    let db = Arc::new(RwLock::new(Database::new(config)));
+    aof.write().unwrap().read(handle_read, Arc::clone(&db))?;
+
     server.listen(aof, db)
 }

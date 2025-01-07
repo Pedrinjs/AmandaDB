@@ -9,6 +9,7 @@ fn usize_to_u8(number: usize) -> u8 {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub enum Value {
     Str(&'static str),

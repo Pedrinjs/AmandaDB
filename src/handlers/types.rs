@@ -1,11 +1,13 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
+use crate::config::Config;
 use crate::resp::value::Value;
 
-pub type Handler = fn(Vec<Value>, Arc<Mutex<Database>>) -> Value;
+pub type Handler = fn(Vec<Value>, Arc<RwLock<Database>>) -> Value;
 
 pub struct Database {
+    config: Config,
     set: HashMap<String, String>,
     hset: HashMap<String, HashMap<String, String>>,
     multi: Vec<(Value, Vec<Value>)>,
@@ -14,14 +16,19 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new() -> Self {
-        Self{
+    pub fn new(config: Config) -> Self {
+        Self {
+            config,
             set: HashMap::new(),
             hset: HashMap::new(),
             multi: Vec::new(),
             transaction_mode: false,
             execution_mode: false,
         }
+    }
+
+    pub fn config(&self) -> Config {
+        self.config
     }
 
     pub fn is_transaction_mode(&self) -> bool {
@@ -93,7 +100,7 @@ impl Database {
         let map: HashMap<String, String> = HashMap::from([(key, value)]);
         self.hset.insert(hash, map);
     }
-    pub fn hset_get(&mut self, hash: &String, key: &String) -> Value {
+    pub fn hset_get(&self, hash: &String, key: &String) -> Value {
         let map = match self.hset.get(hash) {
             Some(m) => m.clone(),
             _ => return Value::Null,
@@ -153,6 +160,7 @@ impl Database {
 
     pub fn create_database_copy(&self) -> Self {
         Self {
+            config: self.config,
             set: self.set.clone(),
             hset: self.hset.clone(),
             multi: self.multi.clone(),
@@ -161,6 +169,7 @@ impl Database {
         }
     }
     pub fn database_revert(&mut self, copy: Database) {
+        self.config = copy.config;
         self.set = copy.set;
         self.hset = copy.hset;
         self.multi = copy.multi;

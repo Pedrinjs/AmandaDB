@@ -1,12 +1,13 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
+use crate::config::Config;
 use crate::error::Result;
 use crate::handlers::types::Database;
 use crate::resp::{reader::RESP, value::Value};
 
-type DB = Arc<Mutex<Database>>;
+type DB = Arc<RwLock<Database>>;
 
 pub struct AOF {
     file: File,
@@ -14,18 +15,18 @@ pub struct AOF {
 }
 
 impl AOF {
-    pub fn new(path: impl Into<String>) -> Result<Self> {
+    pub fn new(config: Config) -> Result<Self> {
         let file = File::options()
             .read(true)
             .write(true)
             .create(true)
-            .open(path.into())?;
+            .open(config.aof())?;
 
         Ok(Self { file, insert_queue: Vec::new() })
     }
 
     pub fn read(&mut self, func: fn(Value, DB), db: DB) -> Result<()> {
-        let len = self.file.metadata().unwrap().len();
+        let len = self.file.metadata()?.len();
         if len == 0 {
             return Ok(());
         }
