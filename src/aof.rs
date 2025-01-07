@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 
 use crate::config::Config;
 use crate::error::Result;
-use crate::handlers::types::Database;
-use crate::resp::{reader::RESP, value::Value};
+use crate::database::Database;
+use crate::resp::{RESP, Value};
 
 type DB = Arc<RwLock<Database>>;
 

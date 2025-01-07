@@ -1,10 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 
 use crate::config::Config;
-use crate::resp::value::Value;
-
-pub type Handler = fn(Vec<Value>, Arc<RwLock<Database>>) -> Value;
+use crate::resp::Value;
 
 pub struct Database {
     config: Config,

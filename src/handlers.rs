@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use super::types::{Database, Handler};
 use crate::aof::AOF;
-use crate::resp::value::Value;
+use crate::database::Database;
+use crate::resp::Value;
 
 type Aof = Arc<RwLock<AOF>>;
 type DB = Arc<RwLock<Database>>;
+
+type Handler = fn(Vec<Value>, DB) -> Value;
 
 pub struct Handlers<'a> {
     handlers: HashMap<&'a str, Handler>,

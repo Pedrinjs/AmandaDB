@@ -2,6 +2,7 @@ use std::sync::{Arc, RwLock};
 
 mod aof;
 mod config;
+mod database;
 mod error;
 mod handlers;
 mod resp;
@@ -11,8 +12,9 @@ mod thread;
 use aof::AOF;
 use config::Config;
 use error::Result;
-use handlers::{handler::Handlers, types::Database};
-use resp::value::Value;
+use handlers::Handlers;
+use database::Database;
+use resp::Value;
 use server::Server;
 
 fn handle_read(value: Value, db: Arc<RwLock<Database>>) {

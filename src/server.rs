@@ -5,8 +5,9 @@ use std::sync::{Arc, RwLock};
 use crate::aof::AOF;
 use crate::config::Config;
 use crate::error::{new_error, Result};
-use crate::handlers::{handler::Handlers, types::Database};
-use crate::resp::{reader::RESP, writer::Writer};
+use crate::handlers::Handlers;
+use crate::database::Database;
+use crate::resp::{RESP, Writer};
 use crate::thread::ThreadPool;
 
 pub struct Server {
