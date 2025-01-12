@@ -25,7 +25,7 @@ impl Database {
     }
 
     pub fn config(&self) -> Config {
-        self.config
+        self.config.clone()
     }
 
     pub fn is_transaction_mode(&self) -> bool {
@@ -157,7 +157,7 @@ impl Database {
 
     pub fn create_database_copy(&self) -> Self {
         Self {
-            config: self.config,
+            config: self.config.clone(),
             set: self.set.clone(),
             hset: self.hset.clone(),
             multi: self.multi.clone(),

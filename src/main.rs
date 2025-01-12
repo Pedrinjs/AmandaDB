@@ -38,11 +38,11 @@ fn handle_read(value: Value, db: Arc<RwLock<Database>>) {
 }
 
 fn main() -> Result<()> {
-    let config = Config::default();
+    let config = Config::read_from_file("amanda.conf")?;
 
-    let server = Server::new(config)?;
-    let aof = Arc::new(RwLock::new(AOF::new(config)?));
-    let db = Arc::new(RwLock::new(Database::new(config)));
+    let server = Server::new(config.clone())?;
+    let aof = Arc::new(RwLock::new(AOF::new(config.clone())?));
+    let db = Arc::new(RwLock::new(Database::new(config.clone())));
     aof.write().unwrap().read(handle_read, Arc::clone(&db))?;
 
     server.listen(aof, db)
