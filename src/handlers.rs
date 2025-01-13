@@ -33,34 +33,34 @@ impl<'a> Handlers<'a> {
             return Value::Error("ERR: The command must be a bulk string");
         };
 
-        let temp = command.to_uppercase();
-        let cmd = temp.as_str();
+        let cmd = command.to_uppercase();
+        let handler = match self.get(&cmd) {
+            Some(h) => h,
+            None => return Value::Error("ERR: Command does not exist"),
+        };
 
-        if let Some(handler) = self.get(cmd) {
-            if cmd == "EXEC" || cmd == "DISCARD" {
-                db.write().unwrap().set_transaction_mode(false);
-            }
-
-            let args = &arr[1..];
-            if db.read().unwrap().is_transaction_mode() {
-                db.write().unwrap().multi_push(Value::BulkStr(command.into()), args.to_vec());
-                return Value::Str("QUEUED");
-            }
-            
-            let command_list = vec!["SET", "HSET", "DEL", "HDEL", "INCR", "INCRBY", "DECR", "DECRBY"];
-            if command_list.contains(&cmd) {
-                if db.read().unwrap().is_execution_mode() {
-                    aof.write().unwrap().enqueue(input);
-                } else {
-                    match aof.write().unwrap().write(input) {
-                        Ok(_) => (),
-                        Err(_) => return Value::Error("ERR: Failed to append to AOF"),
-                    };
-                }
-            }
-            return handler(args.to_vec(), db);
+        if &cmd == "EXEC" || &cmd == "DISCARD" {
+            db.write().unwrap().set_transaction_mode(false);
         }
-        return Value::Error("ERR: Command does not exist");
+
+        let args = &arr[1..];
+        if db.read().unwrap().is_transaction_mode() {
+            db.write().unwrap().multi_push(Value::BulkStr(command.into()), args.to_vec());
+            return Value::Str("QUEUED");
+        }
+            
+        let command_list = vec!["SET", "HSET", "DEL", "HDEL", "INCR", "INCRBY", "DECR", "DECRBY"];
+        if command_list.contains(&cmd.as_str()) {
+            if db.read().unwrap().is_execution_mode() {
+                aof.write().unwrap().enqueue(input);
+            } else {
+                match aof.write().unwrap().write(input) {
+                    Ok(_) => (),
+                    Err(_) => return Value::Error("ERR: Failed to append to AOF"),
+                };
+            }
+        }
+        handler(args.to_vec(), db)
     }
 
     fn insert(&mut self, key: &'a str, handler: Handler) {
@@ -188,7 +188,7 @@ fn flushdb(args: Vec<Value>, db: DB) -> Value {
 
     db.write().unwrap().set_clear();
     db.write().unwrap().hset_clear();
-    std::fs::File::create("database.aof").unwrap();
+    std::fs::File::create(db.read().unwrap().config().aof()).unwrap();
     Value::Null
 }
 
@@ -374,10 +374,10 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
     handlers.init();
 
     let transaction = db.read().unwrap().multi_get();
-    let mut values: Vec<Value> = Vec::new();
-
     db.write().unwrap().set_execution_mode(true);
     let copy = db.read().unwrap().create_database_copy();
+
+    let mut values: Vec<Value> = Vec::new();
     for (cmd, args) in transaction.into_iter() {
         let mut input: Vec<Value> = Vec::new();
         input.push(cmd);

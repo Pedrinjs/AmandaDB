@@ -38,7 +38,13 @@ fn handle_read(value: Value, db: Arc<RwLock<Database>>) {
 }
 
 fn main() -> Result<()> {
-    let config = Config::read_from_file("amanda.conf")?;
+    let mut args = std::env::args();
+    args.next();
+
+    let config = match args.next() {
+        Some(path) => Config::read_from_file(&path)?,
+        None => Config::default(),
+    };
 
     let server = Server::new(config.clone())?;
     let aof = Arc::new(RwLock::new(AOF::new(config.clone())?));
