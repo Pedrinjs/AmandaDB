@@ -204,6 +204,6 @@ impl Value {
     }
 
     fn marshal_null(self) -> Vec<u8> {
-        "$_\r\n".as_bytes().to_owned()
+        "_\r\n".as_bytes().to_owned()
     }
 }

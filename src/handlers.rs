@@ -155,13 +155,13 @@ fn exists(args: Vec<Value>, db: DB) -> Value {
     }
 
     let mut counter = 0i64;
-    args.iter().for_each(|val| {
+    for val in args {
         if let Value::BulkStr(key) = val {
             if db.read().unwrap().set_contains(&key) {
                 counter += 1;
             }
         }
-    });
+    }
     Value::Num(counter)
 }
 
@@ -171,13 +171,13 @@ fn hexists(args: Vec<Value>, db: DB) -> Value {
     }
 
     let mut counter = 0i64;
-    args.chunks(2).for_each(|arg| {
+    for arg in args.chunks(2) {
         if let [Value::BulkStr(hash), Value::BulkStr(key)] = arg {
             if db.read().unwrap().hset_contains(hash, key) {
                 counter += 1;
             }
         }
-    });
+    }
     Value::Num(counter)
 }
 
@@ -203,7 +203,6 @@ fn set(args: Vec<Value>, db: DB) -> Value {
     let Value::BulkStr(value) = &args[1] else {
         return Value::Error("ERR: Value must be a bulk string");
     };
-
     db.write().unwrap().set_push(key.into(), value.into());
     Value::Str("OK")
 }
@@ -214,9 +213,8 @@ fn get(args: Vec<Value>, db: DB) -> Value {
     }
 
     let Value::BulkStr(key) = &args[0] else {
-        return Value::Error("ERR: Key wasn't registered in database");
+        return Value::Error("ERR: Incorrect definition for key");
     };
-
     db.read().unwrap().set_get(key)
 }
 
@@ -245,10 +243,10 @@ fn hget(args: Vec<Value>, db: DB) -> Value {
     }
 
     let Value::BulkStr(hash) = &args[0] else {
-        return Value::Error("ERR: Hash must be a bulk string");
+        return Value::Error("ERR: Incorrect definition for hash");
     };
     let Value::BulkStr(key) = &args[1] else {
-        return Value::Error("ERR: Key must be a bulk string");
+        return Value::Error("ERR: Incorrect definition for key");
     };
 
     db.read().unwrap().hset_get(hash, key)
@@ -260,13 +258,13 @@ fn del(args: Vec<Value>, db: DB) -> Value {
     }
 
     let mut counter = 0i64;
-    args.iter().for_each(|arg| {
+    for arg in args {
         if let Value::BulkStr(key) = arg {
             if db.write().unwrap().set_remove(&key) {
                 counter += 1;
             }
         }
-    });
+    }
     Value::Num(counter)
 }
 
@@ -276,14 +274,13 @@ fn hdel(args: Vec<Value>, db: DB) -> Value {
     }
 
     let mut counter = 0i64;
-    args.chunks(2).for_each(|arg| {
+    for arg in args.chunks(2) {
         if let [Value::BulkStr(hash), Value::BulkStr(key)] = arg {
             if db.write().unwrap().hset_remove(hash, key) {
                 counter += 1;
             }
         }
-    });
-
+    }
     Value::Num(counter)
 }
 
@@ -295,7 +292,6 @@ fn incr(args: Vec<Value>, db: DB) -> Value {
     let Value::BulkStr(key) = &args[0] else {
         return Value::Error("ERR: Incorrect definition for key");
     };
-
     db.write().unwrap().set_incr(key.into(), 1)
 }
 
@@ -305,9 +301,8 @@ fn incr_by(args: Vec<Value>, db: DB) -> Value {
     }
 
     let Value::BulkStr(key) = &args[0] else {
-        return Value::Error("ERR: Wrong definition for key");
+        return Value::Error("ERR: Incorrect definition for key");
     };
-
     let Value::BulkStr(increment) = &args[1] else {
         return Value::Error("ERR: Value is not an integer or out of range");
     };
@@ -316,7 +311,6 @@ fn incr_by(args: Vec<Value>, db: DB) -> Value {
         Ok(n) => n,
         _ => return Value::Error("ERR: Value is not an integer or out of range"),
     };
-
     db.write().unwrap().set_incr(key.into(), incr)
 }
 
@@ -324,10 +318,10 @@ fn decr(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 1 {
         return Value::Error("ERR: Wrong number of arguments");
     }
-    let Value::BulkStr(key) = &args[0] else {
-        return Value::Error("ERR: Wrong definition for key");
-    };
 
+    let Value::BulkStr(key) = &args[0] else {
+        return Value::Error("ERR: Incorrect definition for key");
+    };
     db.write().unwrap().set_incr(key.into(), -1)
 }
 
@@ -347,7 +341,6 @@ fn decr_by(args: Vec<Value>, db: DB) -> Value {
         Ok(n) => n,
         _ => return Value::Error("ERR: Value is not an integer or out of range"),
     };
-
     db.write().unwrap().set_incr(key.into(), -decr)
 }
 
@@ -355,6 +348,7 @@ fn multi(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 0 {
         return Value::Error("ERR: Wrong number of arguments");
     }
+
     db.write().unwrap().set_transaction_mode(true);
     Value::Str("OK")
 }
@@ -391,6 +385,7 @@ fn exec(args: Vec<Value>, db: DB) -> Value {
         }
         values.push(value)
     }
+    
     db.write().unwrap().multi_clear();
     db.write().unwrap().set_execution_mode(false);
 
@@ -404,6 +399,7 @@ fn discard(args: Vec<Value>, db: DB) -> Value {
     if args.len() != 0 {
         return Value::Error("ERR: Wrong number of arguments");
     }
+
     db.write().unwrap().multi_clear();
     Value::Str("OK")
 }

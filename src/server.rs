@@ -61,9 +61,9 @@ fn handle_request(mut stream: TcpStream, aof: Arc<RwLock<AOF>>, db: Arc<RwLock<D
         let mut writer = Writer::new(Box::new(stream.try_clone()?));
 
         let result = handlers.match_handler(value, aof.clone(), db.clone());
-        if let Some(err) = result.is_error() {
-            return Err(new_error(err));
-        }
-        writer.write(result)?;
+        match result.is_error() {
+            Some(err) => return Err(new_error(err)),
+            _ => writer.write(result)?,
+        };
     }
 }
