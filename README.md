@@ -17,21 +17,28 @@ You can install AmandaDB by cloning the PKGBUILD and building with makepkg:
 
 Make sure you have the `base-devel` package group installed.
 ```
-sudo pacman -S --needed git base-devel
-git clone https://aur.archlinux.org/amandadb.git
-cd amandadb
-makepkg -si
+$ sudo pacman -S --needed git base-devel
+$ git clone https://aur.archlinux.org/amandadb.git
+$ cd amandadb
+$ makepkg -si
 ```
 
 ## Usage
-To run AmandaDB, just type:
+To run AmandaDB with the default configuration, simply type:
 ```
-amandadb
+$ amandadb
 ```
 
-It will start running at localhost at port 6379.
+It will start running at localhost:6379.
+If you have a config file (.conf) with `key=value` syntax, you have to run it using an additional parameter:
+```
+$ amandadb /path/to/file.conf
+```
+The config file can provide port, database name (called as "aof") and number of threads.
+The database name should not contain single or double quotes
+
 As a Redis clone, you can play with it directly with the "redis-cli" command.
-The database created persists at an append-only file.
+The database created persists at an append-only file (AOF).
 
 ## Docs
 Although this current project isn't fully compatible, you can read the official docs for Redis in <https://redis.io/docs/latest/>

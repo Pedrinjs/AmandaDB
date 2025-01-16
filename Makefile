@@ -1,13 +1,14 @@
 PKGNAME := amandadb
 PKGDIR :=
 PREFIX := /usr/bin
+CONFIG := 
 
 clean:
 	@rm -rf target/*
 	@cargo clean
 
 run:
-	cargo run
+	cargo run $(CONFIG)
 
 build: @cargo build --release
 

@@ -188,7 +188,7 @@ fn flushdb(args: Vec<Value>, db: DB) -> Value {
 
     db.write().unwrap().set_clear();
     db.write().unwrap().hset_clear();
-    std::fs::File::create(db.read().unwrap().config().aof()).unwrap();
+    std::fs::File::create(db.read().unwrap().config().dbname()).unwrap();
     Value::Null
 }
 

@@ -20,7 +20,7 @@ impl AOF {
             .read(true)
             .write(true)
             .create(true)
-            .open(config.aof())?;
+            .open(config.dbname())?;
 
         Ok(Self { file, insert_queue: Vec::new() })
     }

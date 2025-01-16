@@ -17,8 +17,7 @@ pub struct Server {
 
 impl Server {
     pub fn new(config: Config) -> Result<Self> {
-        let addr = format!("127.0.0.1:{}", config.port());
-        let listener = TcpListener::bind(addr)?;
+        let listener = TcpListener::bind(("127.0.0.1", config.port()))?;
         let pool = ThreadPool::new(config.threads());
         
         Ok(Self {
